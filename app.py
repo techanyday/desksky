@@ -34,6 +34,14 @@ GOOGLE_CLIENT_CONFIG = {
     }
 }
 
+# Define OAuth scopes
+OAUTH_SCOPES = [
+    'openid',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/presentations'
+]
+
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -98,7 +106,7 @@ def login():
     try:
         flow = Flow.from_client_config(
             GOOGLE_CLIENT_CONFIG,
-            scopes=['openid', 'email', 'profile', 'https://www.googleapis.com/auth/presentations']
+            scopes=OAUTH_SCOPES
         )
         
         flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
@@ -127,7 +135,7 @@ def oauth2callback():
         
         flow = Flow.from_client_config(
             GOOGLE_CLIENT_CONFIG,
-            scopes=['openid', 'email', 'profile', 'https://www.googleapis.com/auth/presentations'],
+            scopes=OAUTH_SCOPES,
             state=state
         )
         flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
