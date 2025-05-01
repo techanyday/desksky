@@ -140,21 +140,60 @@ init_db()
 def index():
     return render_template('index.html')
 
-@app.route('/create-slides', methods=['GET', 'POST'])
+@app.route('/create-slides', methods=['POST'])
 @login_required
 def create_slides():
-    if request.method == 'POST':
-        title = request.form.get('title')
-        num_slides = int(request.form.get('num_slides', 5))
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        # Create a new presentation
+        presentation = Presentation(
+            user_id=current_user.id,
+            title=data.get('title', 'Untitled Presentation'),
+            num_slides=0,
+            status='pending'
+        )
+        db.session.add(presentation)
+        db.session.commit()
+
+        # Create presentation in Google Slides
+        service = build('slides', 'v1', credentials=credentials_from_session())
+        slides_presentation = service.presentations().create(body={
+            'title': presentation.title
+        }).execute()
+
+        # Update our presentation with Google Slides ID
+        presentation.google_presentation_id = slides_presentation.get('presentationId')
+        presentation.status = 'completed'
+        db.session.commit()
+
+        logger.info(f"Created presentation with ID: {presentation.id}")
+        return jsonify({
+            'presentation_id': presentation.id,
+            'google_presentation_id': presentation.google_presentation_id
+        })
+
+    except Exception as e:
+        logger.error(f"Error creating slides: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/presentation/<int:presentation_id>')
+@login_required
+def view_presentation(presentation_id):
+    presentation = Presentation.query.get_or_404(presentation_id)
+    
+    # Ensure user owns this presentation
+    if presentation.user_id != current_user.id:
+        abort(403)
         
-        # Check user credits/subscription
-        if not check_user_credits(current_user, num_slides):
-            return jsonify({'error': 'Insufficient credits'})
-            
-        # Generate slides logic will be implemented in slides_generator.py
-        return jsonify({'status': 'processing'})
-        
-    return render_template('create_slides.html')
+    return render_template(
+        'presentation.html',
+        presentation=presentation,
+        google_presentation_url=f"https://docs.google.com/presentation/d/{presentation.google_presentation_id}/edit"
+    )
 
 @app.route('/pricing')
 def pricing():

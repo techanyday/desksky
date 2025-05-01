@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h1 class="text-2xl font-bold mb-4">{{ presentation.title }}</h1>
+        
+        <div class="mb-4">
+            <p class="text-gray-600">Status: <span class="font-semibold">{{ presentation.status }}</span></p>
+            <p class="text-gray-600">Created: <span class="font-semibold">{{ presentation.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</span></p>
+        </div>
+
+        {% if presentation.status == 'completed' %}
+        <div class="mt-6">
+            <a href="{{ google_presentation_url }}" target="_blank" 
+               class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                Open in Google Slides
+            </a>
+        </div>
+        {% else %}
+        <div class="mt-6">
+            <p class="text-yellow-600">Your presentation is being generated...</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
