@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, login_required, current_user
+from flask_login import LoginManager, UserMixin, login_user, login_required, current_user, logout_user
 import os
 from datetime import datetime
 from dotenv import load_dotenv
@@ -12,9 +12,20 @@ import json
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = os.getenv('SECRET_KEY', os.urandom(24))
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///slides.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Google OAuth2 Configuration
+GOOGLE_CLIENT_CONFIG = {
+    "web": {
+        "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+        "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "redirect_uris": [os.getenv("GOOGLE_REDIRECT_URI", "https://decksky.onrender.com/oauth2callback")]
+    }
+}
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -66,10 +77,65 @@ def create_slides():
 def pricing():
     return render_template('pricing.html')
 
+@app.route('/login')
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    flow = Flow.from_client_config(
+        GOOGLE_CLIENT_CONFIG,
+        scopes=['openid', 'email', 'profile', 'https://www.googleapis.com/auth/presentations']
+    )
+    
+    flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
+    authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
+    
+    session['state'] = state
+    return redirect(authorization_url)
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
+
 @app.route('/oauth2callback')
 def oauth2callback():
-    # Google OAuth callback handling will be implemented
-    pass
+    state = session.get('state')
+    
+    flow = Flow.from_client_config(
+        GOOGLE_CLIENT_CONFIG,
+        scopes=['openid', 'email', 'profile', 'https://www.googleapis.com/auth/presentations'],
+        state=state
+    )
+    flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
+    
+    authorization_response = request.url
+    flow.fetch_token(authorization_response=authorization_response)
+    
+    credentials = flow.credentials
+    session['credentials'] = {
+        'token': credentials.token,
+        'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri,
+        'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret,
+        'scopes': credentials.scopes
+    }
+    
+    # Get user info from Google
+    oauth2_client = build('oauth2', 'v2', credentials=credentials)
+    user_info = oauth2_client.userinfo().get().execute()
+    
+    # Find or create user
+    user = User.query.filter_by(email=user_info['email']).first()
+    if not user:
+        user = User(email=user_info['email'])
+        db.session.add(user)
+        db.session.commit()
+    
+    login_user(user)
+    return redirect(url_for('index'))
 
 def check_user_credits(user, num_slides):
     if user.subscription_status == 'premium':
@@ -77,6 +143,16 @@ def check_user_credits(user, num_slides):
     elif user.subscription_status == 'free':
         return user.free_credits > 0 and num_slides <= 5
     return False
+
+# Error handlers
+@app.errorhandler(404)
+def not_found_error(error):
+    return render_template('error.html', error_code=404, error_message="Page not found"), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return render_template('error.html', error_code=500, error_message="Internal server error"), 500
 
 if __name__ == '__main__':
     with app.app_context():
