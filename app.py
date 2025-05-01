@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, abort
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, current_user, logout_user
 import os
@@ -12,8 +12,15 @@ import json
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', os.urandom(24))
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///slides.db'
+app.secret_key = os.getenv('SECRET_KEY')
+if not app.secret_key:
+    app.secret_key = os.urandom(24)  # Fallback for development
+
+# Database configuration
+if os.getenv('DATABASE_URL'):
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///slides.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Google OAuth2 Configuration
@@ -82,16 +89,28 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for('index'))
     
-    flow = Flow.from_client_config(
-        GOOGLE_CLIENT_CONFIG,
-        scopes=['openid', 'email', 'profile', 'https://www.googleapis.com/auth/presentations']
-    )
+    if not GOOGLE_CLIENT_CONFIG["web"]["client_id"] or not GOOGLE_CLIENT_CONFIG["web"]["client_secret"]:
+        app.logger.error("Google OAuth credentials not configured")
+        return render_template('error.html', 
+                            error_code=500, 
+                            error_message="OAuth not configured. Please contact support."), 500
     
-    flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
-    authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
-    
-    session['state'] = state
-    return redirect(authorization_url)
+    try:
+        flow = Flow.from_client_config(
+            GOOGLE_CLIENT_CONFIG,
+            scopes=['openid', 'email', 'profile', 'https://www.googleapis.com/auth/presentations']
+        )
+        
+        flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
+        authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
+        
+        session['state'] = state
+        return redirect(authorization_url)
+    except Exception as e:
+        app.logger.error(f"Error in login route: {str(e)}")
+        return render_template('error.html', 
+                            error_code=500, 
+                            error_message="Authentication error. Please try again."), 500
 
 @app.route('/logout')
 @login_required
@@ -101,41 +120,49 @@ def logout():
 
 @app.route('/oauth2callback')
 def oauth2callback():
-    state = session.get('state')
-    
-    flow = Flow.from_client_config(
-        GOOGLE_CLIENT_CONFIG,
-        scopes=['openid', 'email', 'profile', 'https://www.googleapis.com/auth/presentations'],
-        state=state
-    )
-    flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
-    
-    authorization_response = request.url
-    flow.fetch_token(authorization_response=authorization_response)
-    
-    credentials = flow.credentials
-    session['credentials'] = {
-        'token': credentials.token,
-        'refresh_token': credentials.refresh_token,
-        'token_uri': credentials.token_uri,
-        'client_id': credentials.client_id,
-        'client_secret': credentials.client_secret,
-        'scopes': credentials.scopes
-    }
-    
-    # Get user info from Google
-    oauth2_client = build('oauth2', 'v2', credentials=credentials)
-    user_info = oauth2_client.userinfo().get().execute()
-    
-    # Find or create user
-    user = User.query.filter_by(email=user_info['email']).first()
-    if not user:
-        user = User(email=user_info['email'])
-        db.session.add(user)
-        db.session.commit()
-    
-    login_user(user)
-    return redirect(url_for('index'))
+    try:
+        state = session.get('state')
+        if not state:
+            return redirect(url_for('login'))
+        
+        flow = Flow.from_client_config(
+            GOOGLE_CLIENT_CONFIG,
+            scopes=['openid', 'email', 'profile', 'https://www.googleapis.com/auth/presentations'],
+            state=state
+        )
+        flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
+        
+        authorization_response = request.url
+        flow.fetch_token(authorization_response=authorization_response)
+        
+        credentials = flow.credentials
+        session['credentials'] = {
+            'token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes
+        }
+        
+        # Get user info from Google
+        oauth2_client = build('oauth2', 'v2', credentials=credentials)
+        user_info = oauth2_client.userinfo().get().execute()
+        
+        # Find or create user
+        user = User.query.filter_by(email=user_info['email']).first()
+        if not user:
+            user = User(email=user_info['email'])
+            db.session.add(user)
+            db.session.commit()
+        
+        login_user(user)
+        return redirect(url_for('index'))
+    except Exception as e:
+        app.logger.error(f"Error in oauth2callback: {str(e)}")
+        return render_template('error.html', 
+                            error_code=500, 
+                            error_message="Authentication failed. Please try again."), 500
 
 def check_user_credits(user, num_slides):
     if user.subscription_status == 'premium':
@@ -154,7 +181,13 @@ def internal_error(error):
     db.session.rollback()
     return render_template('error.html', error_code=500, error_message="Internal server error"), 500
 
-if __name__ == '__main__':
-    with app.app_context():
+# Ensure database is created
+with app.app_context():
+    try:
         db.create_all()
+        app.logger.info("Database tables created successfully")
+    except Exception as e:
+        app.logger.error(f"Error creating database tables: {str(e)}")
+
+if __name__ == '__main__':
     app.run(debug=True)

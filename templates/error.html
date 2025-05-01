@@ -4,8 +4,27 @@
 <div class="max-w-lg mx-auto mt-10 text-center">
     <h1 class="text-4xl font-bold text-red-600 mb-4">{{ error_code }}</h1>
     <p class="text-xl text-gray-700 mb-8">{{ error_message }}</p>
-    <a href="{{ url_for('index') }}" class="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
-        Return Home
-    </a>
+    
+    {% if error_code == 500 %}
+    <div class="bg-gray-50 p-6 rounded-lg mb-8">
+        <h2 class="text-lg font-semibold mb-4">Possible Solutions:</h2>
+        <ul class="text-left list-disc list-inside space-y-2">
+            <li>Try refreshing the page</li>
+            <li>Clear your browser cookies and try again</li>
+            <li>If the error persists, please try again later</li>
+        </ul>
+    </div>
+    {% endif %}
+    
+    <div class="space-x-4">
+        <a href="{{ url_for('index') }}" class="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
+            Return Home
+        </a>
+        {% if error_code == 500 %}
+        <a href="mailto:support@decksky.com" class="inline-block border border-blue-600 text-blue-600 px-6 py-2 rounded-lg hover:bg-blue-50">
+            Contact Support
+        </a>
+        {% endif %}
+    </div>
 </div>
 {% endblock %}
