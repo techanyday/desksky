@@ -140,9 +140,12 @@ init_db()
 def index():
     return render_template('index.html')
 
-@app.route('/create-slides', methods=['POST'])
+@app.route('/create-slides', methods=['GET', 'POST'])
 @login_required
 def create_slides():
+    if request.method == 'GET':
+        return render_template('create_slides.html')
+        
     try:
         data = request.get_json()
         if not data:
