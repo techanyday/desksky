@@ -68,11 +68,19 @@ login_manager.login_view = 'login'
 
 # Database Models
 class User(UserMixin, db.Model):
+    __tablename__ = 'user'
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     free_credits = db.Column(db.Integer, default=3)
-    subscription_status = db.Column(db.String(20), default='free')
-    subscription_end = db.Column(db.DateTime)
+    subscription_status = db.Column(db.String(20), default='free')  # free, premium
+    subscription_end = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __init__(self, email):
+        self.email = email
+        self.free_credits = 3
+        self.subscription_status = 'free'
+        self.subscription_end = None
 
 class Presentation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -85,6 +93,22 @@ class Presentation(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+# Ensure database is created with proper schema
+def init_db():
+    with app.app_context():
+        # Drop all tables
+        logger.info("Dropping all tables...")
+        db.drop_all()
+        
+        # Create all tables
+        logger.info("Creating all tables...")
+        db.create_all()
+        
+        logger.info("Database initialized successfully")
+
+# Initialize database on startup
+init_db()
 
 # Routes
 @app.route('/')
@@ -217,14 +241,6 @@ def not_found_error(error):
 def internal_error(error):
     db.session.rollback()
     return render_template('error.html', error_code=500, error_message="Internal server error"), 500
-
-# Ensure database is created
-with app.app_context():
-    try:
-        db.create_all()
-        app.logger.info("Database tables created successfully")
-    except Exception as e:
-        app.logger.error(f"Error creating database tables: {str(e)}")
 
 if __name__ == '__main__':
     app.run(debug=True)
