@@ -8,33 +8,50 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 import json
+import logging
 
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY')
 if not app.secret_key:
     app.secret_key = os.urandom(24)  # Fallback for development
+    logger.warning("No SECRET_KEY set, using random key")
 
 # Database configuration
 database_url = os.getenv('DATABASE_URL')
 if database_url and database_url.startswith('postgres://'):
-    # Render provides PostgreSQL URLs starting with postgres://, but SQLAlchemy requires postgresql://
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    logger.info("Using PostgreSQL database")
+else:
+    logger.info("Using SQLite database")
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url or 'sqlite:///slides.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Google OAuth2 Configuration
+client_id = os.getenv("GOOGLE_CLIENT_ID")
+client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "https://decksky.onrender.com/oauth2callback")
+
+if not client_id or not client_secret:
+    logger.error("Google OAuth credentials not configured properly")
+
 GOOGLE_CLIENT_CONFIG = {
     "web": {
-        "client_id": os.getenv("GOOGLE_CLIENT_ID"),
-        "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+        "client_id": client_id,
+        "client_secret": client_secret,
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
-        "redirect_uris": [os.getenv("GOOGLE_REDIRECT_URI", "https://decksky.onrender.com/oauth2callback")]
+        "redirect_uris": [redirect_uri]
     }
 }
+
+logger.info(f"Configured redirect URI: {redirect_uri}")
 
 # Define OAuth scopes
 OAUTH_SCOPES = [
@@ -97,10 +114,11 @@ def pricing():
 @app.route('/login')
 def login():
     if current_user.is_authenticated:
+        logger.info("Already authenticated user attempting to login")
         return redirect(url_for('index'))
     
     if not GOOGLE_CLIENT_CONFIG["web"]["client_id"] or not GOOGLE_CLIENT_CONFIG["web"]["client_secret"]:
-        app.logger.error("Google OAuth credentials not configured")
+        logger.error("Missing OAuth credentials")
         return render_template('error.html', 
                             error_code=500, 
                             error_message="OAuth not configured. Please contact support."), 500
@@ -115,9 +133,10 @@ def login():
         authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
         
         session['state'] = state
+        logger.info("Starting OAuth flow, redirecting to Google")
         return redirect(authorization_url)
     except Exception as e:
-        app.logger.error(f"Error in login route: {str(e)}")
+        logger.error(f"Error in login route: {str(e)}", exc_info=True)
         return render_template('error.html', 
                             error_code=500, 
                             error_message="Authentication error. Please try again."), 500
@@ -133,8 +152,10 @@ def oauth2callback():
     try:
         state = session.get('state')
         if not state:
+            logger.error("No state in session")
             return redirect(url_for('login'))
         
+        logger.info("Received OAuth callback")
         flow = Flow.from_client_config(
             GOOGLE_CLIENT_CONFIG,
             scopes=OAUTH_SCOPES,
@@ -143,6 +164,8 @@ def oauth2callback():
         flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
         
         authorization_response = request.url
+        logger.info(f"Authorization response URL: {authorization_response}")
+        
         flow.fetch_token(authorization_response=authorization_response)
         
         credentials = flow.credentials
@@ -158,18 +181,22 @@ def oauth2callback():
         # Get user info from Google
         oauth2_client = build('oauth2', 'v2', credentials=credentials)
         user_info = oauth2_client.userinfo().get().execute()
+        logger.info(f"Retrieved user info for email: {user_info.get('email')}")
         
         # Find or create user
         user = User.query.filter_by(email=user_info['email']).first()
         if not user:
+            logger.info(f"Creating new user for email: {user_info.get('email')}")
             user = User(email=user_info['email'])
             db.session.add(user)
             db.session.commit()
         
         login_user(user)
+        logger.info(f"Successfully logged in user: {user.email}")
         return redirect(url_for('index'))
     except Exception as e:
-        app.logger.error(f"Error in oauth2callback: {str(e)}")
+        logger.error(f"Error in oauth2callback: {str(e)}", exc_info=True)
+        db.session.rollback()
         return render_template('error.html', 
                             error_code=500, 
                             error_message="Authentication failed. Please try again."), 500
