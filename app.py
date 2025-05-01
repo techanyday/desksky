@@ -75,6 +75,7 @@ class User(UserMixin, db.Model):
     subscription_status = db.Column(db.String(20), default='free')  # free, premium
     subscription_end = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    payments = db.relationship('Payment', backref='user', lazy=True, cascade='all, delete-orphan')
 
     def __init__(self, email):
         self.email = email
@@ -82,13 +83,26 @@ class User(UserMixin, db.Model):
         self.subscription_status = 'free'
         self.subscription_end = None
 
-class Presentation(db.Model):
+class Payment(db.Model):
+    __tablename__ = 'payment'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    title = db.Column(db.String(200), nullable=False)
-    slides_count = db.Column(db.Integer, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    currency = db.Column(db.String(3), default='USD')
+    status = db.Column(db.String(20), nullable=False)  # success, pending, failed
+    payment_type = db.Column(db.String(20), nullable=False)  # credits, subscription
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    presentation_id = db.Column(db.String(200))
+    reference = db.Column(db.String(100), unique=True)
+
+class Presentation(db.Model):
+    __tablename__ = 'presentation'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    num_slides = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(20), default='pending')  # pending, completed, failed
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    google_presentation_id = db.Column(db.String(100), unique=True)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -97,15 +111,26 @@ def load_user(user_id):
 # Ensure database is created with proper schema
 def init_db():
     with app.app_context():
-        # Drop all tables
-        logger.info("Dropping all tables...")
-        db.drop_all()
+        # Drop all tables with proper cascading
+        try:
+            logger.info("Dropping all tables...")
+            db.session.execute(db.text('DROP SCHEMA public CASCADE'))
+            db.session.execute(db.text('CREATE SCHEMA public'))
+            db.session.commit()
+            logger.info("Successfully dropped and recreated schema")
+        except Exception as e:
+            logger.error(f"Error dropping schema: {str(e)}")
+            db.session.rollback()
         
-        # Create all tables
-        logger.info("Creating all tables...")
-        db.create_all()
-        
-        logger.info("Database initialized successfully")
+        try:
+            # Create all tables
+            logger.info("Creating all tables...")
+            db.create_all()
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            logger.error(f"Error creating tables: {str(e)}")
+            db.session.rollback()
+            raise
 
 # Initialize database on startup
 init_db()
