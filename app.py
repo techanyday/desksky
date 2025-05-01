@@ -17,10 +17,12 @@ if not app.secret_key:
     app.secret_key = os.urandom(24)  # Fallback for development
 
 # Database configuration
-if os.getenv('DATABASE_URL'):
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
-else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///slides.db'
+database_url = os.getenv('DATABASE_URL')
+if database_url and database_url.startswith('postgres://'):
+    # Render provides PostgreSQL URLs starting with postgres://, but SQLAlchemy requires postgresql://
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url or 'sqlite:///slides.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Google OAuth2 Configuration
