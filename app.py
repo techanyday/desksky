@@ -153,189 +153,317 @@ init_db()
 def index():
     return render_template('index.html')
 
+def generate_slide_content(topic, slide_type):
+    """Generate topic-specific, professional slide content."""
+    
+    # Extract key terms for better content generation
+    topic_terms = topic.lower().split()
+    is_ai_related = any(term in ['ai', 'artificial', 'intelligence', 'ml', 'machine'] for term in topic_terms)
+    is_business = any(term in ['business', 'enterprise', 'company', 'market', 'industry'] for term in topic_terms)
+    
+    if slide_type == "TITLE":
+        return {
+            'layout': 'TITLE_HERO',
+            'title': topic,
+            'subtitle': 'Strategic Insights & Implementation Guide',
+            'footer': 'Powered by DeckSky AI'
+        }
+    
+    if slide_type == "AGENDA":
+        return {
+            'layout': 'SECTION_HEADER',
+            'title': 'Presentation Overview',
+            'elements': [
+                {
+                    'shape': 'ROUNDED_RECTANGLE',
+                    'text': '📋 Key Topics\n\n• Current Landscape & Opportunities\n• Implementation Strategy\n• Success Metrics & ROI\n• Future Outlook',
+                    'style': {'alignment': 'START', 'accent_color': '#4285f4'}
+                }
+            ]
+        }
+    
+    if slide_type == "LANDSCAPE" and is_ai_related:
+        return {
+            'layout': 'TWO_COLUMNS_WITH_HEADER',
+            'title': 'AI Technology Landscape',
+            'elements': [
+                {
+                    'shape': 'RECTANGLE',
+                    'text': '🔄 Current State\n\n• Rapid advancement in NLP & Computer Vision\n• Growing adoption of AutoML platforms\n• Rise of AI-first enterprises',
+                    'style': {'alignment': 'START', 'accent_color': '#34a853'}
+                },
+                {
+                    'shape': 'RECTANGLE',
+                    'text': '🎯 Market Dynamics\n\n• $62B AI software market\n• 35% YoY enterprise adoption\n• Key players: Google, AWS, Azure',
+                    'style': {'alignment': 'START', 'accent_color': '#ea4335'}
+                }
+            ]
+        }
+    
+    if slide_type == "IMPLEMENTATION" and is_business:
+        return {
+            'layout': 'THREE_SECTION_GRID',
+            'title': 'Strategic Implementation',
+            'elements': [
+                {
+                    'shape': 'ROUNDED_RECTANGLE',
+                    'text': '1️⃣ Assessment\n\n• Data readiness audit\n• Infrastructure evaluation\n• Team capability analysis',
+                    'style': {'alignment': 'START', 'accent_color': '#fbbc05'}
+                },
+                {
+                    'shape': 'ROUNDED_RECTANGLE',
+                    'text': '2️⃣ Deployment\n\n• Phased rollout plan\n• Integration strategy\n• Change management',
+                    'style': {'alignment': 'START', 'accent_color': '#4285f4'}
+                },
+                {
+                    'shape': 'ROUNDED_RECTANGLE',
+                    'text': '3️⃣ Optimization\n\n• Performance metrics\n• Feedback loops\n• Continuous learning',
+                    'style': {'alignment': 'START', 'accent_color': '#34a853'}
+                }
+            ]
+        }
+    
+    if slide_type == "ROI_METRICS":
+        return {
+            'layout': 'METRICS_DASHBOARD',
+            'title': 'Success Metrics & ROI',
+            'elements': [
+                {
+                    'shape': 'CIRCLE',
+                    'text': '📈 Performance\n\n40%\nProductivity Gain',
+                    'style': {'alignment': 'CENTER', 'accent_color': '#4285f4'}
+                },
+                {
+                    'shape': 'CIRCLE',
+                    'text': '💰 Cost Savings\n\n30%\nOperational Costs',
+                    'style': {'alignment': 'CENTER', 'accent_color': '#34a853'}
+                },
+                {
+                    'shape': 'CIRCLE',
+                    'text': '🎯 Accuracy\n\n95%\nDecision Accuracy',
+                    'style': {'alignment': 'CENTER', 'accent_color': '#ea4335'}
+                }
+            ]
+        }
+    
+    if slide_type == "CONCLUSION":
+        return {
+            'layout': 'CALL_TO_ACTION',
+            'title': 'Next Steps',
+            'elements': [
+                {
+                    'shape': 'ACTION_CARD',
+                    'text': '🚀 Key Takeaways\n\n• AI drives 40% efficiency gains\n• Phased implementation reduces risk\n• ROI visible within 6 months',
+                    'style': {'alignment': 'START', 'accent_color': '#4285f4'}
+                },
+                {
+                    'shape': 'ACTION_CARD',
+                    'text': '📅 Action Items\n\n1. Schedule readiness assessment\n2. Define success metrics\n3. Build implementation roadmap',
+                    'style': {'alignment': 'START', 'accent_color': '#34a853'}
+                }
+            ]
+        }
+    
+    return None
+
 def create_layout_request(layout_type, slide_id, elements):
-    """Create a layout request based on the layout type."""
+    """Create sophisticated layout requests with proper visual hierarchy."""
     requests = []
     
-    # Base dimensions in EMU (English Metric Units)
-    page_width = 9144000  # 10.16" * 914400 EMU/inch
-    page_height = 5143500  # 5.63" * 914400 EMU/inch
+    # Base dimensions
+    page_width = 9144000
+    page_height = 5143500
+    margin = 500000
     
-    if layout_type == "TWO_COLUMNS":
-        # Create two columns with equal width
-        col_width = (page_width - 3000000) // 2  # Subtract margins
-        for i, element in enumerate(elements):
-            shape_id = f"{slide_id}_shape_{i}"
-            requests.append({
-                'createShape': {
-                    'objectId': shape_id,
-                    'shapeType': 'RECTANGLE',
-                    'elementProperties': {
-                        'pageObjectId': slide_id,
-                        'size': {
-                            'width': {'magnitude': col_width, 'unit': 'EMU'},
-                            'height': {'magnitude': 3000000, 'unit': 'EMU'}
-                        },
-                        'transform': {
-                            'scaleX': 1,
-                            'scaleY': 1,
-                            'translateX': 1000000 + (i * (col_width + 1000000)),
-                            'translateY': 1500000,
-                            'unit': 'EMU'
-                        }
-                    }
-                }
-            })
-            # Add text to the shape
-            requests.append({
-                'insertText': {
-                    'objectId': shape_id,
-                    'text': element['text']
-                }
-            })
-            # Style the text
-            requests.extend(create_text_style_requests(shape_id, element.get('style', {})))
-    
-    elif layout_type == "COMPARISON":
-        # Create VS layout with two sides and a divider
-        side_width = (page_width - 4000000) // 2
-        for i, element in enumerate(elements[:2]):
-            shape_id = f"{slide_id}_side_{i}"
-            requests.append({
-                'createShape': {
-                    'objectId': shape_id,
-                    'shapeType': 'RECTANGLE',
-                    'elementProperties': {
-                        'pageObjectId': slide_id,
-                        'size': {
-                            'width': {'magnitude': side_width, 'unit': 'EMU'},
-                            'height': {'magnitude': 3000000, 'unit': 'EMU'}
-                        },
-                        'transform': {
-                            'scaleX': 1,
-                            'scaleY': 1,
-                            'translateX': 1000000 + (i * (side_width + 2000000)),
-                            'translateY': 1500000,
-                            'unit': 'EMU'
-                        }
-                    }
-                }
-            })
-            requests.append({
-                'insertText': {
-                    'objectId': shape_id,
-                    'text': element['text']
-                }
-            })
-            requests.extend(create_text_style_requests(shape_id, element.get('style', {})))
-        
-        # Add VS text in the middle
-        vs_id = f"{slide_id}_vs"
+    if layout_type == "TITLE_HERO":
+        # Create hero title layout with background shape
+        background_id = f"{slide_id}_hero_bg"
         requests.append({
             'createShape': {
-                'objectId': vs_id,
-                'shapeType': 'TEXT_BOX',
+                'objectId': background_id,
+                'shapeType': 'RECTANGLE',
                 'elementProperties': {
                     'pageObjectId': slide_id,
                     'size': {
-                        'width': {'magnitude': 1000000, 'unit': 'EMU'},
-                        'height': {'magnitude': 500000, 'unit': 'EMU'}
+                        'width': {'magnitude': page_width, 'unit': 'EMU'},
+                        'height': {'magnitude': page_height // 2, 'unit': 'EMU'}
                     },
                     'transform': {
                         'scaleX': 1,
                         'scaleY': 1,
-                        'translateX': (page_width - 1000000) // 2,
-                        'translateY': 2750000,
+                        'translateX': 0,
+                        'translateY': 0,
                         'unit': 'EMU'
                     }
                 }
             }
         })
+        # Style the background
         requests.append({
-            'insertText': {
-                'objectId': vs_id,
-                'text': 'VS'
+            'updateShapeProperties': {
+                'objectId': background_id,
+                'shapeProperties': {
+                    'shapeBackgroundFill': {
+                        'solidFill': {
+                            'color': {
+                                'rgbColor': {
+                                    'red': 0.259,
+                                    'green': 0.522,
+                                    'blue': 0.957
+                                }
+                            }
+                        }
+                    }
+                },
+                'fields': 'shapeBackgroundFill'
             }
         })
+        
+    elif layout_type == "TWO_COLUMNS_WITH_HEADER":
+        # Calculate column dimensions
+        col_width = (page_width - (margin * 3)) // 2
+        col_height = page_height - (margin * 4)
+        
+        for i, element in enumerate(elements):
+            shape_id = f"{slide_id}_col_{i}"
+            # Create column container
+            requests.append({
+                'createShape': {
+                    'objectId': shape_id,
+                    'shapeType': element['shape'],
+                    'elementProperties': {
+                        'pageObjectId': slide_id,
+                        'size': {
+                            'width': {'magnitude': col_width, 'unit': 'EMU'},
+                            'height': {'magnitude': col_height, 'unit': 'EMU'}
+                        },
+                        'transform': {
+                            'scaleX': 1,
+                            'scaleY': 1,
+                            'translateX': margin + (i * (col_width + margin)),
+                            'translateY': margin * 2,
+                            'unit': 'EMU'
+                        }
+                    }
+                }
+            })
+            # Style the shape
+            requests.extend(create_shape_style_requests(shape_id, element['style']))
+            # Add text
+            requests.append({
+                'insertText': {
+                    'objectId': shape_id,
+                    'text': element['text']
+                }
+            })
+    
+    elif layout_type == "METRICS_DASHBOARD":
+        # Create metric circles in a row
+        circle_size = 2000000  # Fixed size for circles
+        spacing = (page_width - (circle_size * 3)) // 4
+        
+        for i, element in enumerate(elements):
+            circle_id = f"{slide_id}_metric_{i}"
+            requests.append({
+                'createShape': {
+                    'objectId': circle_id,
+                    'shapeType': 'ELLIPSE',
+                    'elementProperties': {
+                        'pageObjectId': slide_id,
+                        'size': {
+                            'width': {'magnitude': circle_size, 'unit': 'EMU'},
+                            'height': {'magnitude': circle_size, 'unit': 'EMU'}
+                        },
+                        'transform': {
+                            'scaleX': 1,
+                            'scaleY': 1,
+                            'translateX': spacing + (i * (circle_size + spacing)),
+                            'translateY': (page_height - circle_size) // 2,
+                            'unit': 'EMU'
+                        }
+                    }
+                }
+            })
+            # Style and add text
+            requests.extend(create_shape_style_requests(circle_id, element['style']))
+            requests.append({
+                'insertText': {
+                    'objectId': circle_id,
+                    'text': element['text']
+                }
+            })
     
     return requests
 
-def create_text_style_requests(object_id, style):
-    """Create text styling requests."""
+def create_shape_style_requests(shape_id, style):
+    """Create sophisticated shape styling requests."""
     requests = []
     
-    # Default styles
-    base_style = {
-        'fontSize': {'magnitude': 14, 'unit': 'PT'},
-        'foregroundColor': {'opaqueColor': {'rgbColor': {'red': 0.2, 'green': 0.2, 'blue': 0.2}}},
-        'bold': style.get('bold', False),
-        'italic': style.get('italic', False)
-    }
+    # Apply shape fill
+    if 'accent_color' in style:
+        requests.append({
+            'updateShapeProperties': {
+                'objectId': shape_id,
+                'shapeProperties': {
+                    'shapeBackgroundFill': {
+                        'solidFill': {
+                            'color': {
+                                'rgbColor': hex_to_rgb(style['accent_color'])
+                            },
+                            'alpha': 0.1
+                        }
+                    }
+                },
+                'fields': 'shapeBackgroundFill'
+            }
+        })
     
-    # Apply text style
+    # Apply text styling
     requests.append({
         'updateTextStyle': {
-            'objectId': object_id,
-            'style': base_style,
-            'fields': 'fontSize,foregroundColor,bold,italic'
+            'objectId': shape_id,
+            'style': {
+                'fontSize': {'magnitude': 14, 'unit': 'PT'},
+                'foregroundColor': {
+                    'opaqueColor': {
+                        'rgbColor': hex_to_rgb(style.get('text_color', '#000000'))
+                    }
+                },
+                'bold': style.get('bold', False)
+            },
+            'fields': 'fontSize,foregroundColor,bold'
         }
     })
     
-    # Apply paragraph alignment
-    if 'alignment' in style:
-        requests.append({
-            'updateParagraphStyle': {
-                'objectId': object_id,
-                'style': {'alignment': style['alignment']},
-                'fields': 'alignment'
-            }
-        })
-    
     return requests
 
-def generate_slide_content(topic, slide_type):
-    """Generate concise, presentation-ready content based on slide type."""
-    if slide_type == "TITLE":
-        return {
-            'layout': 'TITLE',
-            'title': topic,
-            'subtitle': 'Key Strategies & Solutions'
-        }
+def hex_to_rgb(hex_color):
+    """Convert hex color to RGB values."""
+    hex_color = hex_color.lstrip('#')
+    rgb = tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+    return {'red': rgb[0], 'green': rgb[1], 'blue': rgb[2]}
+
+def generate_slides_content(title, topic, num_slides):
+    """Generate a complete, professional slide deck with proper flow."""
+    slides = []
     
-    if slide_type == "PROBLEM_SOLUTION":
-        return {
-            'layout': 'TWO_COLUMNS',
-            'title': 'Challenge & Solution',
-            'elements': [
-                {
-                    'text': '🔴 Key Challenge:\n• Limited resources\n• Market uncertainty\n• Fierce competition',
-                    'style': {'alignment': 'START'}
-                },
-                {
-                    'text': '✅ Solution:\n• Lean methodology\n• MVP approach\n• Strategic partnerships',
-                    'style': {'alignment': 'START'}
-                }
-            ]
-        }
+    # Always include these core slides
+    core_slides = [
+        "TITLE",
+        "AGENDA",
+        "LANDSCAPE",
+        "IMPLEMENTATION",
+        "ROI_METRICS",
+        "CONCLUSION"
+    ]
     
-    if slide_type == "METRICS":
-        return {
-            'layout': 'COMPARISON',
-            'title': 'Key Success Metrics',
-            'elements': [
-                {
-                    'text': '📈 Growth Metrics\n• Customer acquisition\n• Revenue growth\n• Market share',
-                    'style': {'bold': True}
-                },
-                {
-                    'text': '💰 Financial Health\n• Burn rate\n• Runway\n• Unit economics',
-                    'style': {'bold': True}
-                }
-            ]
-        }
+    # Generate all core slides
+    for slide_type in core_slides:
+        content = generate_slide_content(topic, slide_type)
+        if content:
+            slides.append(content)
     
-    # Add more slide types as needed...
-    return None
+    return slides
 
 def create_slide(service, presentation_id, slide_content, index):
     """Create a slide with enhanced layout and formatting."""
@@ -400,20 +528,38 @@ def create_slide(service, presentation_id, slide_content, index):
     
     return requests
 
-def generate_slides_content(title, topic, num_slides):
-    """Generate professional slide deck content."""
-    slides = []
+def create_text_style_requests(object_id, style):
+    """Create text styling requests."""
+    requests = []
     
-    # Title slide
-    slides.append(generate_slide_content(title, "TITLE"))
+    # Default styles
+    base_style = {
+        'fontSize': {'magnitude': 14, 'unit': 'PT'},
+        'foregroundColor': {'opaqueColor': {'rgbColor': {'red': 0.2, 'green': 0.2, 'blue': 0.2}}},
+        'bold': style.get('bold', False),
+        'italic': style.get('italic', False)
+    }
     
-    # Core slides with varied layouts
-    slide_types = ["PROBLEM_SOLUTION", "METRICS"]  # Add more types as needed
-    for i in range(num_slides - 2):  # -2 for title and conclusion
-        slide_type = slide_types[i % len(slide_types)]
-        slides.append(generate_slide_content(topic, slide_type))
+    # Apply text style
+    requests.append({
+        'updateTextStyle': {
+            'objectId': object_id,
+            'style': base_style,
+            'fields': 'fontSize,foregroundColor,bold,italic'
+        }
+    })
     
-    return slides
+    # Apply paragraph alignment
+    if 'alignment' in style:
+        requests.append({
+            'updateParagraphStyle': {
+                'objectId': object_id,
+                'style': {'alignment': style['alignment']},
+                'fields': 'alignment'
+            }
+        })
+    
+    return requests
 
 @app.route('/create-slides', methods=['GET', 'POST'])
 @login_required
