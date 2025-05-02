@@ -218,21 +218,42 @@ def create_slide(service, presentation_id, slide_content, index):
     """Create a single slide in the presentation."""
     requests = []
     
+    # Generate a unique ID for each element
+    slide_id = f'slide_{index}'
+    title_id = f'title_{index}'
+    body_id = f'body_{index}'
+    
     # Create a new slide
     requests.append({
         'createSlide': {
-            'objectId': f'slide_{index}',
+            'objectId': slide_id,
             'insertionIndex': index,
             'slideLayoutReference': {
-                'predefinedLayout': 'TITLE_AND_BODY' if 'bullets' in slide_content else 'TITLE'
-            }
+                'predefinedLayout': 'TITLE_AND_BODY' if 'bullets' in slide_content else 'TITLE_AND_SUBTITLE'
+            },
+            'placeholderIdMappings': [
+                {
+                    'layoutPlaceholder': {
+                        'type': 'TITLE',
+                        'index': 0
+                    },
+                    'objectId': title_id
+                },
+                {
+                    'layoutPlaceholder': {
+                        'type': 'BODY' if 'bullets' in slide_content else 'SUBTITLE',
+                        'index': 0
+                    },
+                    'objectId': body_id
+                }
+            ]
         }
     })
     
-    # Add title
+    # Add title text
     requests.append({
         'insertText': {
-            'objectId': f'slide_{index}',
+            'objectId': title_id,
             'insertionIndex': 0,
             'text': slide_content['title']
         }
@@ -242,7 +263,7 @@ def create_slide(service, presentation_id, slide_content, index):
     if 'subtitle' in slide_content:
         requests.append({
             'insertText': {
-                'objectId': f'slide_{index}',
+                'objectId': body_id,
                 'insertionIndex': 0,
                 'text': slide_content['subtitle']
             }
@@ -251,7 +272,7 @@ def create_slide(service, presentation_id, slide_content, index):
         bullet_text = '\n• ' + '\n• '.join(slide_content['bullets'])
         requests.append({
             'insertText': {
-                'objectId': f'slide_{index}',
+                'objectId': body_id,
                 'insertionIndex': 0,
                 'text': bullet_text
             }
