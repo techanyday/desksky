@@ -229,7 +229,7 @@ def create_slide(service, presentation_id, slide_content, index):
             'objectId': slide_id,
             'insertionIndex': index,
             'slideLayoutReference': {
-                'predefinedLayout': 'TITLE_AND_BODY' if 'bullets' in slide_content else 'TITLE_AND_SUBTITLE'
+                'predefinedLayout': 'TITLE_AND_BODY' if 'bullets' in slide_content else 'TITLE_ONLY'
             },
             'placeholderIdMappings': [
                 {
@@ -238,17 +238,20 @@ def create_slide(service, presentation_id, slide_content, index):
                         'index': 0
                     },
                     'objectId': title_id
-                },
-                {
-                    'layoutPlaceholder': {
-                        'type': 'BODY' if 'bullets' in slide_content else 'SUBTITLE',
-                        'index': 0
-                    },
-                    'objectId': body_id
                 }
             ]
         }
     })
+    
+    # Add body placeholder mapping if it's a content slide
+    if 'bullets' in slide_content:
+        requests[-1]['createSlide']['placeholderIdMappings'].append({
+            'layoutPlaceholder': {
+                'type': 'BODY',
+                'index': 0
+            },
+            'objectId': body_id
+        })
     
     # Add title text
     requests.append({
@@ -261,6 +264,27 @@ def create_slide(service, presentation_id, slide_content, index):
     
     # Add subtitle or bullets
     if 'subtitle' in slide_content:
+        # For title slides, add subtitle as text box
+        requests.append({
+            'createShape': {
+                'objectId': body_id,
+                'shapeType': 'TEXT_BOX',
+                'elementProperties': {
+                    'pageObjectId': slide_id,
+                    'size': {
+                        'width': {'magnitude': 5000000, 'unit': 'EMU'},
+                        'height': {'magnitude': 1000000, 'unit': 'EMU'}
+                    },
+                    'transform': {
+                        'scaleX': 1,
+                        'scaleY': 1,
+                        'translateX': 1000000,
+                        'translateY': 2000000,
+                        'unit': 'EMU'
+                    }
+                }
+            }
+        })
         requests.append({
             'insertText': {
                 'objectId': body_id,
@@ -275,6 +299,17 @@ def create_slide(service, presentation_id, slide_content, index):
                 'objectId': body_id,
                 'insertionIndex': 0,
                 'text': bullet_text
+            }
+        })
+        
+        # Apply bullet style
+        requests.append({
+            'createParagraphBullets': {
+                'objectId': body_id,
+                'textRange': {
+                    'type': 'ALL'
+                },
+                'bulletPreset': 'BULLET_DISC_CIRCLE_SQUARE'
             }
         })
     
