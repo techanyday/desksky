@@ -153,189 +153,99 @@ init_db()
 def index():
     return render_template('index.html')
 
-def generate_content_for_topic(topic):
-    """Generate meaningful content for any topic."""
-    # Extract key phrases from topic
-    topic_words = topic.lower().split()
-    
-    # Define content structure based on topic type
-    content = {
-        'overview': [
-            f"Understanding {topic} in today's context",
-            f"Impact and significance of {topic}",
-            f"Key stakeholders and beneficiaries"
-        ],
-        'key_concepts': [
-            f"Core principles and fundamentals of {topic}",
-            f"Essential components and frameworks",
-            f"Building blocks and key elements"
-        ],
-        'current_trends': [
-            f"Latest developments in {topic}",
-            f"Emerging patterns and innovations",
-            f"Industry leaders and pioneers"
-        ],
-        'applications': [
-            f"Real-world applications of {topic}",
-            f"Case studies and success stories",
-            f"Implementation strategies"
-        ],
-        'challenges': [
-            f"Common challenges in {topic}",
-            f"Barriers to adoption and growth",
-            f"Risk factors and considerations"
-        ],
-        'solutions': [
-            f"Best practices for {topic}",
-            f"Proven solutions and approaches",
-            f"Implementation guidelines"
-        ],
-        'future': [
-            f"Future outlook for {topic}",
-            f"Upcoming trends and predictions",
-            f"Opportunities for growth"
-        ],
-        'recommendations': [
-            f"Strategic recommendations for {topic}",
-            f"Action items and next steps",
-            f"Success metrics and KPIs"
-        ]
-    }
-    return content
-
-def generate_slides_content(title, topic, num_slides):
-    """Generate detailed slide content using the topic and desired number of slides."""
-    content = generate_content_for_topic(topic)
-    
-    # Always include title and conclusion slides
-    slides = [
-        {
-            'title': title,
-            'subtitle': f'A Comprehensive Overview of {topic}\nPresented by DeckSky'
-        }
-    ]
-    
-    # Calculate how many content slides we need (excluding title and conclusion)
-    content_slides_needed = num_slides - 2
-    
-    # Add introduction if we have room
-    if content_slides_needed > 0:
-        slides.append({
-            'title': 'Introduction',
-            'bullets': content['overview']
-        })
-        content_slides_needed -= 1
-    
-    # Add main content slides
-    main_sections = [
-        {'title': 'Key Concepts', 'content': content['key_concepts']},
-        {'title': 'Current Landscape', 'content': content['current_trends']},
-        {'title': 'Applications', 'content': content['applications']},
-        {'title': 'Challenges & Solutions', 'content': [
-            content['challenges'][0],
-            content['solutions'][0],
-            f"Overcoming barriers in {topic}"
-        ]},
-        {'title': 'Best Practices', 'content': content['solutions']},
-        {'title': 'Implementation Strategy', 'content': [
-            f"Step-by-step approach to {topic}",
-            f"Key success factors for {topic}",
-            f"Resource requirements and planning"
-        ]},
-        {'title': 'Case Studies', 'content': [
-            f"Success story 1: {topic} in action",
-            f"Success story 2: Lessons learned",
-            f"Key takeaways and insights"
-        ]},
-        {'title': 'Future Outlook', 'content': content['future']}
-    ]
-    
-    # Distribute content slides based on available space
-    for i in range(content_slides_needed):
-        section = main_sections[i % len(main_sections)]
-        slides.append({
-            'title': section['title'],
-            'bullets': section['content']
-        })
-    
-    # Always add conclusion with actionable insights
-    slides.append({
-        'title': 'Key Takeaways',
-        'bullets': [
-            f"Essential insights about {topic}",
-            f"Action items and next steps",
-            f"Resources for further exploration"
-        ]
-    })
-    
-    return slides
-
-def create_slide(service, presentation_id, slide_content, index):
-    """Create a single slide in the presentation with enhanced formatting."""
+def create_layout_request(layout_type, slide_id, elements):
+    """Create a layout request based on the layout type."""
     requests = []
     
-    # Generate unique IDs for elements
-    slide_id = f'slide_{index}'
-    title_id = f'title_{index}'
-    body_id = f'body_{index}'
+    # Base dimensions in EMU (English Metric Units)
+    page_width = 9144000  # 10.16" * 914400 EMU/inch
+    page_height = 5143500  # 5.63" * 914400 EMU/inch
     
-    # Create slide with proper layout
-    requests.append({
-        'createSlide': {
-            'objectId': slide_id,
-            'insertionIndex': index,
-            'slideLayoutReference': {
-                'predefinedLayout': 'TITLE_AND_BODY' if 'bullets' in slide_content else 'TITLE_ONLY'
-            },
-            'placeholderIdMappings': [
-                {
-                    'layoutPlaceholder': {
-                        'type': 'TITLE',
-                        'index': 0
-                    },
-                    'objectId': title_id
+    if layout_type == "TWO_COLUMNS":
+        # Create two columns with equal width
+        col_width = (page_width - 3000000) // 2  # Subtract margins
+        for i, element in enumerate(elements):
+            shape_id = f"{slide_id}_shape_{i}"
+            requests.append({
+                'createShape': {
+                    'objectId': shape_id,
+                    'shapeType': 'RECTANGLE',
+                    'elementProperties': {
+                        'pageObjectId': slide_id,
+                        'size': {
+                            'width': {'magnitude': col_width, 'unit': 'EMU'},
+                            'height': {'magnitude': 3000000, 'unit': 'EMU'}
+                        },
+                        'transform': {
+                            'scaleX': 1,
+                            'scaleY': 1,
+                            'translateX': 1000000 + (i * (col_width + 1000000)),
+                            'translateY': 1500000,
+                            'unit': 'EMU'
+                        }
+                    }
                 }
-            ]
-        }
-    })
+            })
+            # Add text to the shape
+            requests.append({
+                'insertText': {
+                    'objectId': shape_id,
+                    'text': element['text']
+                }
+            })
+            # Style the text
+            requests.extend(create_text_style_requests(shape_id, element.get('style', {})))
     
-    # Add body placeholder for content slides
-    if 'bullets' in slide_content:
-        requests[-1]['createSlide']['placeholderIdMappings'].append({
-            'layoutPlaceholder': {
-                'type': 'BODY',
-                'index': 0
-            },
-            'objectId': body_id
-        })
-    
-    # Add title with formatting
-    requests.append({
-        'insertText': {
-            'objectId': title_id,
-            'insertionIndex': 0,
-            'text': slide_content['title']
-        }
-    })
-    
-    # Add subtitle or bullets with enhanced formatting
-    if 'subtitle' in slide_content:
-        # Create text box for subtitle
+    elif layout_type == "COMPARISON":
+        # Create VS layout with two sides and a divider
+        side_width = (page_width - 4000000) // 2
+        for i, element in enumerate(elements[:2]):
+            shape_id = f"{slide_id}_side_{i}"
+            requests.append({
+                'createShape': {
+                    'objectId': shape_id,
+                    'shapeType': 'RECTANGLE',
+                    'elementProperties': {
+                        'pageObjectId': slide_id,
+                        'size': {
+                            'width': {'magnitude': side_width, 'unit': 'EMU'},
+                            'height': {'magnitude': 3000000, 'unit': 'EMU'}
+                        },
+                        'transform': {
+                            'scaleX': 1,
+                            'scaleY': 1,
+                            'translateX': 1000000 + (i * (side_width + 2000000)),
+                            'translateY': 1500000,
+                            'unit': 'EMU'
+                        }
+                    }
+                }
+            })
+            requests.append({
+                'insertText': {
+                    'objectId': shape_id,
+                    'text': element['text']
+                }
+            })
+            requests.extend(create_text_style_requests(shape_id, element.get('style', {})))
+        
+        # Add VS text in the middle
+        vs_id = f"{slide_id}_vs"
         requests.append({
             'createShape': {
-                'objectId': body_id,
+                'objectId': vs_id,
                 'shapeType': 'TEXT_BOX',
                 'elementProperties': {
                     'pageObjectId': slide_id,
                     'size': {
-                        'width': {'magnitude': 6000000, 'unit': 'EMU'},
-                        'height': {'magnitude': 1000000, 'unit': 'EMU'}
+                        'width': {'magnitude': 1000000, 'unit': 'EMU'},
+                        'height': {'magnitude': 500000, 'unit': 'EMU'}
                     },
                     'transform': {
                         'scaleX': 1,
                         'scaleY': 1,
-                        'translateX': 1000000,
-                        'translateY': 2500000,
+                        'translateX': (page_width - 1000000) // 2,
+                        'translateY': 2750000,
                         'unit': 'EMU'
                     }
                 }
@@ -343,67 +253,167 @@ def create_slide(service, presentation_id, slide_content, index):
         })
         requests.append({
             'insertText': {
-                'objectId': body_id,
-                'insertionIndex': 0,
-                'text': slide_content['subtitle']
-            }
-        })
-        # Center align subtitle
-        requests.append({
-            'updateParagraphStyle': {
-                'objectId': body_id,
-                'style': {
-                    'alignment': 'CENTER'
-                },
-                'fields': 'alignment'
-            }
-        })
-    elif 'bullets' in slide_content:
-        # Add bullets with proper formatting
-        bullet_text = '\n• ' + '\n• '.join(slide_content['bullets'])
-        requests.append({
-            'insertText': {
-                'objectId': body_id,
-                'insertionIndex': 0,
-                'text': bullet_text
-            }
-        })
-        
-        # Apply bullet style and formatting
-        requests.append({
-            'createParagraphBullets': {
-                'objectId': body_id,
-                'textRange': {
-                    'type': 'ALL'
-                },
-                'bulletPreset': 'BULLET_DISC_CIRCLE_SQUARE'
-            }
-        })
-        
-        # Add text styling
-        requests.append({
-            'updateTextStyle': {
-                'objectId': body_id,
-                'style': {
-                    'fontSize': {
-                        'magnitude': 18,
-                        'unit': 'PT'
-                    },
-                    'foregroundColor': {
-                        'opaqueColor': {
-                            'rgbColor': {
-                                'red': 0.2,
-                                'green': 0.2,
-                                'blue': 0.2
-                            }
-                        }
-                    }
-                },
-                'fields': 'fontSize,foregroundColor'
+                'objectId': vs_id,
+                'text': 'VS'
             }
         })
     
     return requests
+
+def create_text_style_requests(object_id, style):
+    """Create text styling requests."""
+    requests = []
+    
+    # Default styles
+    base_style = {
+        'fontSize': {'magnitude': 14, 'unit': 'PT'},
+        'foregroundColor': {'opaqueColor': {'rgbColor': {'red': 0.2, 'green': 0.2, 'blue': 0.2}}},
+        'bold': style.get('bold', False),
+        'italic': style.get('italic', False)
+    }
+    
+    # Apply text style
+    requests.append({
+        'updateTextStyle': {
+            'objectId': object_id,
+            'style': base_style,
+            'fields': 'fontSize,foregroundColor,bold,italic'
+        }
+    })
+    
+    # Apply paragraph alignment
+    if 'alignment' in style:
+        requests.append({
+            'updateParagraphStyle': {
+                'objectId': object_id,
+                'style': {'alignment': style['alignment']},
+                'fields': 'alignment'
+            }
+        })
+    
+    return requests
+
+def generate_slide_content(topic, slide_type):
+    """Generate concise, presentation-ready content based on slide type."""
+    if slide_type == "TITLE":
+        return {
+            'layout': 'TITLE',
+            'title': topic,
+            'subtitle': 'Key Strategies & Solutions'
+        }
+    
+    if slide_type == "PROBLEM_SOLUTION":
+        return {
+            'layout': 'TWO_COLUMNS',
+            'title': 'Challenge & Solution',
+            'elements': [
+                {
+                    'text': '🔴 Key Challenge:\n• Limited resources\n• Market uncertainty\n• Fierce competition',
+                    'style': {'alignment': 'START'}
+                },
+                {
+                    'text': '✅ Solution:\n• Lean methodology\n• MVP approach\n• Strategic partnerships',
+                    'style': {'alignment': 'START'}
+                }
+            ]
+        }
+    
+    if slide_type == "METRICS":
+        return {
+            'layout': 'COMPARISON',
+            'title': 'Key Success Metrics',
+            'elements': [
+                {
+                    'text': '📈 Growth Metrics\n• Customer acquisition\n• Revenue growth\n• Market share',
+                    'style': {'bold': True}
+                },
+                {
+                    'text': '💰 Financial Health\n• Burn rate\n• Runway\n• Unit economics',
+                    'style': {'bold': True}
+                }
+            ]
+        }
+    
+    # Add more slide types as needed...
+    return None
+
+def create_slide(service, presentation_id, slide_content, index):
+    """Create a slide with enhanced layout and formatting."""
+    requests = []
+    slide_id = f'slide_{index}'
+    
+    # Create base slide
+    requests.append({
+        'createSlide': {
+            'objectId': slide_id,
+            'insertionIndex': index,
+            'slideLayoutReference': {
+                'predefinedLayout': 'BLANK'  # Use blank layout for custom formatting
+            }
+        }
+    })
+    
+    # Add title
+    title_id = f'{slide_id}_title'
+    requests.append({
+        'createShape': {
+            'objectId': title_id,
+            'shapeType': 'TEXT_BOX',
+            'elementProperties': {
+                'pageObjectId': slide_id,
+                'size': {
+                    'width': {'magnitude': 7000000, 'unit': 'EMU'},
+                    'height': {'magnitude': 800000, 'unit': 'EMU'}
+                },
+                'transform': {
+                    'scaleX': 1,
+                    'scaleY': 1,
+                    'translateX': 1000000,
+                    'translateY': 400000,
+                    'unit': 'EMU'
+                }
+            }
+        }
+    })
+    
+    requests.append({
+        'insertText': {
+            'objectId': title_id,
+            'text': slide_content['title']
+        }
+    })
+    
+    # Style title
+    requests.extend(create_text_style_requests(title_id, {
+        'fontSize': {'magnitude': 24, 'unit': 'PT'},
+        'bold': True,
+        'alignment': 'CENTER'
+    }))
+    
+    # Add content based on layout type
+    if 'layout' in slide_content:
+        requests.extend(create_layout_request(
+            slide_content['layout'],
+            slide_id,
+            slide_content.get('elements', [])
+        ))
+    
+    return requests
+
+def generate_slides_content(title, topic, num_slides):
+    """Generate professional slide deck content."""
+    slides = []
+    
+    # Title slide
+    slides.append(generate_slide_content(title, "TITLE"))
+    
+    # Core slides with varied layouts
+    slide_types = ["PROBLEM_SOLUTION", "METRICS"]  # Add more types as needed
+    for i in range(num_slides - 2):  # -2 for title and conclusion
+        slide_type = slide_types[i % len(slide_types)]
+        slides.append(generate_slide_content(topic, slide_type))
+    
+    return slides
 
 @app.route('/create-slides', methods=['GET', 'POST'])
 @login_required
