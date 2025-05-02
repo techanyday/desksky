@@ -1,59 +1,56 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, abort
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, login_required, current_user, logout_user
 import os
+import json
+import logging
 from datetime import datetime
-from dotenv import load_dotenv
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, abort
+from flask_login import LoginManager, UserMixin, login_user, login_required, current_user, logout_user
+from flask_sqlalchemy import SQLAlchemy
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
-import json
-import logging
-
-load_dotenv()
+from dotenv import load_dotenv
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('app')
+
+load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY')
-if not app.secret_key:
-    app.secret_key = os.urandom(24)  # Fallback for development
-    logger.warning("No SECRET_KEY set, using random key")
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
 
 # Database configuration
-database_url = os.getenv('DATABASE_URL')
-if database_url and database_url.startswith('postgres://'):
-    database_url = database_url.replace('postgres://', 'postgresql://', 1)
-    logger.info("Using PostgreSQL database")
+if os.environ.get('DATABASE_URL'):
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+        logger.info("Using PostgreSQL database")
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///slides.db'
     logger.info("Using SQLite database")
 
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url or 'sqlite:///slides.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Google OAuth2 Configuration
-client_id = os.getenv("GOOGLE_CLIENT_ID")
-client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "https://decksky.onrender.com/oauth2callback")
+db = SQLAlchemy(app)
 
-if not client_id or not client_secret:
-    logger.error("Google OAuth credentials not configured properly")
+# Login manager setup
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
 
+# Load Google OAuth configuration
 GOOGLE_CLIENT_CONFIG = {
-    "web": {
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "redirect_uris": [redirect_uri]
+    'web': {
+        'client_id': os.environ.get('GOOGLE_CLIENT_ID'),
+        'client_secret': os.environ.get('GOOGLE_CLIENT_SECRET'),
+        'redirect_uris': [os.environ.get('GOOGLE_REDIRECT_URI', 'https://decksky.onrender.com/oauth2callback')],
+        'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
+        'token_uri': 'https://oauth2.googleapis.com/token'
     }
 }
 
-logger.info(f"Configured redirect URI: {redirect_uri}")
-
-# Define OAuth scopes
+# OAuth scopes
 OAUTH_SCOPES = [
     'openid',
     'https://www.googleapis.com/auth/userinfo.email',
@@ -61,10 +58,11 @@ OAUTH_SCOPES = [
     'https://www.googleapis.com/auth/presentations'
 ]
 
-db = SQLAlchemy(app)
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
+logger.info(f"Configured redirect URI: {GOOGLE_CLIENT_CONFIG['web']['redirect_uris'][0]}")
+
+# OAUTHLIB_INSECURE_TRANSPORT must be enabled for local development
+if os.environ.get('FLASK_ENV') == 'development':
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 # Database Models
 class User(UserMixin, db.Model):
@@ -108,6 +106,21 @@ class Presentation(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+def credentials_from_session():
+    """Get OAuth2 credentials from the session."""
+    if 'credentials' not in session:
+        return None
+        
+    creds_data = session['credentials']
+    return Credentials(
+        token=creds_data['token'],
+        refresh_token=creds_data['refresh_token'],
+        token_uri=creds_data['token_uri'],
+        client_id=GOOGLE_CLIENT_CONFIG['web']['client_id'],
+        client_secret=GOOGLE_CLIENT_CONFIG['web']['client_secret'],
+        scopes=creds_data['scopes']
+    )
+
 # Ensure database is created with proper schema
 def init_db():
     with app.app_context():
@@ -150,6 +163,11 @@ def create_slides():
         data = request.get_json()
         if not data:
             return jsonify({'error': 'No data provided'}), 400
+            
+        # Get credentials
+        credentials = credentials_from_session()
+        if not credentials:
+            return jsonify({'error': 'Not authenticated with Google'}), 401
 
         # Create a new presentation
         presentation = Presentation(
@@ -162,7 +180,7 @@ def create_slides():
         db.session.commit()
 
         # Create presentation in Google Slides
-        service = build('slides', 'v1', credentials=credentials_from_session())
+        service = build('slides', 'v1', credentials=credentials)
         slides_presentation = service.presentations().create(body={
             'title': presentation.title
         }).execute()
@@ -242,55 +260,49 @@ def logout():
 def oauth2callback():
     try:
         state = session.get('state')
-        if not state:
-            logger.error("No state in session")
-            return redirect(url_for('login'))
-        
-        logger.info("Received OAuth callback")
         flow = Flow.from_client_config(
             GOOGLE_CLIENT_CONFIG,
             scopes=OAUTH_SCOPES,
             state=state
         )
-        flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
+        flow.redirect_uri = GOOGLE_CLIENT_CONFIG['web']['redirect_uris'][0]
         
+        # Get authorization code from request
         authorization_response = request.url
-        logger.info(f"Authorization response URL: {authorization_response}")
-        
         flow.fetch_token(authorization_response=authorization_response)
         
+        # Get credentials and store in session
         credentials = flow.credentials
         session['credentials'] = {
             'token': credentials.token,
             'refresh_token': credentials.refresh_token,
             'token_uri': credentials.token_uri,
-            'client_id': credentials.client_id,
-            'client_secret': credentials.client_secret,
             'scopes': credentials.scopes
         }
         
-        # Get user info from Google
-        oauth2_client = build('oauth2', 'v2', credentials=credentials)
-        user_info = oauth2_client.userinfo().get().execute()
-        logger.info(f"Retrieved user info for email: {user_info.get('email')}")
+        # Get user info
+        service = build('oauth2', 'v2', credentials=credentials)
+        user_info = service.userinfo().get().execute()
+        email = user_info.get('email')
         
-        # Find or create user
-        user = User.query.filter_by(email=user_info['email']).first()
+        logger.info(f"Retrieved user info for email: {email}")
+        
+        # Create or get user
+        user = User.query.filter_by(email=email).first()
         if not user:
-            logger.info(f"Creating new user for email: {user_info.get('email')}")
-            user = User(email=user_info['email'])
+            logger.info(f"Creating new user for email: {email}")
+            user = User(email=email)
             db.session.add(user)
             db.session.commit()
         
         login_user(user)
-        logger.info(f"Successfully logged in user: {user.email}")
+        logger.info(f"Successfully logged in user: {email}")
+        
         return redirect(url_for('index'))
+        
     except Exception as e:
-        logger.error(f"Error in oauth2callback: {str(e)}", exc_info=True)
-        db.session.rollback()
-        return render_template('error.html', 
-                            error_code=500, 
-                            error_message="Authentication failed. Please try again."), 500
+        logger.error(f"Error in OAuth callback: {str(e)}")
+        return f"Error: {str(e)}", 500
 
 def check_user_credits(user, num_slides):
     if user.subscription_status == 'premium':
