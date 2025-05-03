@@ -176,7 +176,10 @@ class SlidesGenerator:
 
             # Transform all slides to requests
             all_requests = []
-            for slide in slide_content:
+            for i, slide in enumerate(slide_content):
+                # Add slide ID if not present
+                if 'id' not in slide:
+                    slide['id'] = f'slide_{i+1}'
                 slide_requests = self.transform_slide_to_requests(slide)
                 all_requests.extend(slide_requests)
 
@@ -195,82 +198,86 @@ class SlidesGenerator:
 
     def transform_slide_to_requests(self, slide):
         """Transform a slide into Google Slides API requests."""
-        requests = []
-        
-        # Create a new slide
-        requests.append({
-            'createSlide': {
-                'objectId': slide['id'],
-                'slideLayoutReference': {
-                    'predefinedLayout': 'TITLE_AND_BODY'
-                }
-            }
-        })
-        
-        # Update slide background
-        requests.append({
-            'updatePageProperties': {
-                'objectId': slide['id'],
-                'pageProperties': {
-                    'pageBackgroundFill': self._create_color_style(self.theme['rgb_colors']['background'])
-                },
-                'fields': 'pageBackgroundFill'
-            }
-        })
-
-        # Update title
-        title_id = f"{slide['id']}_title"
-        requests.append({
-            'insertText': {
-                'objectId': title_id,
-                'text': slide['title']
-            }
-        })
-        
-        # Update title style
-        requests.append({
-            'updateTextStyle': {
-                'objectId': title_id,
-                'style': {
-                    'foregroundColor': self.theme['rgb_colors']['title_text'],
-                    'fontSize': {
-                        'magnitude': 24,
-                        'unit': 'PT'
-                    },
-                    'bold': True
-                },
-                'fields': 'foregroundColor,fontSize,bold'
-            }
-        })
-
-        # Update body
-        body_id = f"{slide['id']}_body"
-        bullet_points = [f"• {point}" for point in slide['content']]
-        body_text = "\n".join(bullet_points)
-        
-        requests.append({
-            'insertText': {
-                'objectId': body_id,
-                'text': body_text
-            }
-        })
-        
-        # Update body text style
-        requests.append({
-            'updateTextStyle': {
-                'objectId': body_id,
-                'style': {
-                    'foregroundColor': self.theme['rgb_colors']['body_text'],
-                    'fontSize': {
-                        'magnitude': 18,
-                        'unit': 'PT'
+        try:
+            requests = []
+            
+            # Create a new slide
+            requests.append({
+                'createSlide': {
+                    'objectId': slide['id'],
+                    'slideLayoutReference': {
+                        'predefinedLayout': 'TITLE_AND_BODY'
                     }
-                },
-                'fields': 'foregroundColor,fontSize'
-            }
-        })
+                }
+            })
+            
+            # Update slide background
+            requests.append({
+                'updatePageProperties': {
+                    'objectId': slide['id'],
+                    'pageProperties': {
+                        'pageBackgroundFill': self._create_color_style(self.theme['rgb_colors']['background'])
+                    },
+                    'fields': 'pageBackgroundFill'
+                }
+            })
 
-        return requests
+            # Update title
+            title_id = f"{slide['id']}_title"
+            requests.append({
+                'insertText': {
+                    'objectId': title_id,
+                    'text': slide['title']
+                }
+            })
+            
+            # Update title style
+            requests.append({
+                'updateTextStyle': {
+                    'objectId': title_id,
+                    'style': {
+                        'foregroundColor': self.theme['rgb_colors']['title_text'],
+                        'fontSize': {
+                            'magnitude': 24,
+                            'unit': 'PT'
+                        },
+                        'bold': True
+                    },
+                    'fields': 'foregroundColor,fontSize,bold'
+                }
+            })
+
+            # Update body
+            body_id = f"{slide['id']}_body"
+            bullet_points = [f"• {point}" for point in slide['content']]
+            body_text = "\n".join(bullet_points)
+            
+            requests.append({
+                'insertText': {
+                    'objectId': body_id,
+                    'text': body_text
+                }
+            })
+            
+            # Update body text style
+            requests.append({
+                'updateTextStyle': {
+                    'objectId': body_id,
+                    'style': {
+                        'foregroundColor': self.theme['rgb_colors']['body_text'],
+                        'fontSize': {
+                            'magnitude': 18,
+                            'unit': 'PT'
+                        }
+                    },
+                    'fields': 'foregroundColor,fontSize'
+                }
+            })
+
+            return requests
+        except Exception as e:
+            logger.error(f"Error transforming slide: {str(e)}")
+            raise ValueError(f"Failed to transform slide: {str(e)}") from e
 
     def _create_title_slide(self, title, subtitle=None, slide_id=None):
         """Create a title slide"""

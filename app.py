@@ -341,7 +341,18 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
         
         The first slide should be a title slide, and the last slide should be a summary/conclusion slide.
         Keep bullet points concise and impactful.
-        Avoid using special characters or apostrophes that might cause JSON parsing issues."""
+        Avoid using special characters or apostrophes that might cause JSON parsing issues.
+        Example format:
+        [
+            {
+                "title": "Introduction to AI",
+                "content": [
+                    "Overview of artificial intelligence",
+                    "Key concepts and terminology",
+                    "Historical development"
+                ]
+            }
+        ]"""
 
         # Create user prompt
         user_prompt = f"Create a {num_slides}-slide presentation about '{title}'. Topic focus: {topic}"
@@ -358,6 +369,7 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
 
         # Parse and validate the response
         content = completion.choices[0].message.content
+        app.logger.info(f"GPT Response: {content}")  # Log the response
         slides = json.loads(content)
 
         # Process slides
