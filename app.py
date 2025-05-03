@@ -278,298 +278,146 @@ Return a JSON array of slide objects with this exact structure:
         logger.error(f"Full error details: {e.__class__.__name__}: {str(e)}")
         raise
 
-def create_layout_request(layout_type, slide_id, elements):
-    """Create sophisticated layout requests with proper visual hierarchy."""
-    requests = []
-    
-    # Base dimensions
-    page_width = 9144000
-    page_height = 5143500
-    margin = 500000
-    
-    if layout_type == "TITLE_HERO":
-        # Create hero title layout with background shape
-        background_id = f"{slide_id}_hero_bg"
+def create_slide(service, presentation_id, slide_content, index):
+    """Create a slide and add content."""
+    try:
+        requests = []
+        
+        # Create the slide
         requests.append({
-            'createShape': {
-                'objectId': background_id,
-                'shapeType': 'RECTANGLE',
-                'elementProperties': {
-                    'pageObjectId': slide_id,
-                    'size': {
-                        'width': {'magnitude': page_width, 'unit': 'EMU'},
-                        'height': {'magnitude': page_height, 'unit': 'EMU'}
-                    },
-                    'transform': {
-                        'scaleX': 1,
-                        'scaleY': 1,
-                        'translateX': 0,
-                        'translateY': 0,
-                        'unit': 'EMU'
-                    }
+            'createSlide': {
+                'objectId': f'slide_{index}',
+                'insertionIndex': index,
+                'slideLayoutReference': {
+                    'predefinedLayout': slide_content.get('layout', 'TITLE_AND_BODY')
                 }
             }
         })
-        
-    elif layout_type == "METRICS_DASHBOARD":
-        # Create a grid layout for metrics
-        circle_size = 2000000  # Size in EMU
-        spacing = (page_width - (len(elements) * circle_size)) // (len(elements) + 1)
-        
-        for i, element in enumerate(elements):
-            circle_id = f"{slide_id}_col_{i}"
-            # Create shape first
+
+        # Get the created slide ID
+        slide_id = f'slide_{index}'
+
+        # Add title
+        if 'title' in slide_content:
             requests.append({
-                'createShape': {
-                    'objectId': circle_id,
-                    'shapeType': 'ELLIPSE',
-                    'elementProperties': {
-                        'pageObjectId': slide_id,
-                        'size': {
-                            'width': {'magnitude': circle_size, 'unit': 'EMU'},
-                            'height': {'magnitude': circle_size, 'unit': 'EMU'}
-                        },
-                        'transform': {
-                            'scaleX': 1,
-                            'scaleY': 1,
-                            'translateX': spacing + (i * (circle_size + spacing)),
-                            'translateY': (page_height - circle_size) // 2,
-                            'unit': 'EMU'
-                        }
-                    }
+                'insertText': {
+                    'objectId': f'{slide_id}_title',
+                    'text': slide_content['title']
                 }
             })
-            
-            # First add text content
-            if element.get('text'):
+
+        # Add subtitle for title slides
+        if slide_content.get('layout') == 'TITLE_HERO' and 'subtitle' in slide_content:
+            requests.append({
+                'insertText': {
+                    'objectId': f'{slide_id}_subtitle',
+                    'text': slide_content['subtitle']
+                }
+            })
+
+        # Add elements (body content)
+        if 'elements' in slide_content:
+            for i, element in enumerate(slide_content['elements']):
+                # Create text box
+                box_id = f'{slide_id}_body_{i}'
+                requests.append({
+                    'createShape': {
+                        'objectId': box_id,
+                        'shapeType': element.get('shape', 'RECTANGLE'),
+                        'elementProperties': {
+                            'pageObjectId': slide_id,
+                            'size': {
+                                'width': {'magnitude': 350, 'unit': 'PT'},
+                                'height': {'magnitude': 200, 'unit': 'PT'}
+                            },
+                            'transform': {
+                                'scaleX': 1,
+                                'scaleY': 1,
+                                'translateX': 50 + (i * 400),
+                                'translateY': 150,
+                                'unit': 'PT'
+                            }
+                        }
+                    }
+                })
+                
+                # Insert text into the shape
                 requests.append({
                     'insertText': {
-                        'objectId': circle_id,
+                        'objectId': box_id,
                         'text': element['text']
                     }
                 })
                 
-            # Then apply styles
-            if element.get('style'):
-                requests.extend(create_shape_style_requests(circle_id, element['style']))
-    
-    return requests
-
-def create_shape_style_requests(shape_id, style):
-    """Create sophisticated shape styling requests."""
-    requests = []
-    
-    # Apply shape fill
-    if 'accent_color' in style:
-        requests.append({
-            'updateShapeProperties': {
-                'objectId': shape_id,
-                'shapeProperties': {
-                    'shapeBackgroundFill': {
-                        'solidFill': {
-                            'color': {
-                                'rgbColor': hex_to_rgb(style['accent_color'])
+                # Apply text style
+                if 'style' in element:
+                    style = element['style']
+                    requests.append({
+                        'updateTextStyle': {
+                            'objectId': box_id,
+                            'style': {
+                                'bold': True,
+                                'fontSize': {'magnitude': 14, 'unit': 'PT'},
+                                'foregroundColor': {'opaqueColor': {'themeColor': 'TEXT1'}},
                             },
-                            'alpha': 0.1
+                            'fields': 'bold,fontSize,foregroundColor'
                         }
-                    }
-                },
-                'fields': 'shapeBackgroundFill'
-            }
-        })
-    
-    # Apply text styling
-    requests.append({
-        'updateTextStyle': {
-            'objectId': shape_id,
-            'style': {
-                'fontSize': {'magnitude': 14, 'unit': 'PT'},
-                'foregroundColor': {
-                    'opaqueColor': {
-                        'rgbColor': hex_to_rgb(style.get('text_color', '#000000'))
-                    }
-                },
-                'bold': style.get('bold', False),
-                'italic': style.get('italic', False)
-            },
-            'fields': 'fontSize,foregroundColor,bold,italic'
-        }
-    })
-    
-    return requests
+                    })
 
-def hex_to_rgb(hex_color):
-    """Convert hex color to RGB values."""
-    hex_color = hex_color.lstrip('#')
-    rgb = tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
-    return {'red': rgb[0], 'green': rgb[1], 'blue': rgb[2]}
-
-def create_slide(service, presentation_id, slide_content, index):
-    """Create a slide with enhanced layout and formatting."""
-    requests = []
-    slide_id = f'slide_{index}'
-    
-    # Create base slide
-    requests.append({
-        'createSlide': {
-            'objectId': slide_id,
-            'insertionIndex': index,
-            'slideLayoutReference': {
-                'predefinedLayout': 'BLANK'  # Use blank layout for custom formatting
-            }
-        }
-    })
-    
-    # Add title
-    title_id = f'{slide_id}_title'
-    requests.append({
-        'createShape': {
-            'objectId': title_id,
-            'shapeType': 'RECTANGLE',
-            'elementProperties': {
-                'pageObjectId': slide_id,
-                'size': {
-                    'width': {'magnitude': 7000000, 'unit': 'EMU'},
-                    'height': {'magnitude': 1000000, 'unit': 'EMU'}
-                },
-                'transform': {
-                    'scaleX': 1,
-                    'scaleY': 1,
-                    'translateX': 1072000,
-                    'translateY': 500000,
-                    'unit': 'EMU'
-                }
-            }
-        }
-    })
-    
-    # First insert text
-    requests.append({
-        'insertText': {
-            'objectId': title_id,
-            'text': slide_content['title']
-        }
-    })
-    
-    # Then add content based on layout type
-    if 'layout' in slide_content:
-        layout_requests = create_layout_request(
-            slide_content['layout'],
-            slide_id,
-            slide_content.get('elements', [])
-        )
-        requests.extend(layout_requests)
-    
-    # Finally apply all text styles
-    requests.extend(create_text_style_requests(title_id, {
-        'fontSize': {'magnitude': 24, 'unit': 'PT'},
-        'bold': True,
-        'alignment': 'CENTER'
-    }))
-    
-    return requests
-
-def create_text_style_requests(object_id, style):
-    """Create text styling requests."""
-    requests = []
-    
-    # Default styles
-    base_style = {
-        'fontSize': {'magnitude': 14, 'unit': 'PT'},
-        'foregroundColor': {'opaqueColor': {'rgbColor': {'red': 0.2, 'green': 0.2, 'blue': 0.2}}},
-        'bold': style.get('bold', False),
-        'italic': style.get('italic', False)
-    }
-    
-    # Apply text style
-    requests.append({
-        'updateTextStyle': {
-            'objectId': object_id,
-            'style': base_style,
-            'fields': 'fontSize,foregroundColor,bold,italic'
-        }
-    })
-    
-    # Apply paragraph alignment
-    if 'alignment' in style:
-        requests.append({
-            'updateParagraphStyle': {
-                'objectId': object_id,
-                'style': {'alignment': style['alignment']},
-                'fields': 'alignment'
-            }
-        })
-    
-    return requests
+        # Execute the requests
+        body = {'requests': requests}
+        response = service.presentations().batchUpdate(
+            presentationId=presentation_id, body=body).execute()
+        
+        return response
+    except Exception as e:
+        logger.error(f"Error creating slide: {str(e)}")
+        raise
 
 @app.route('/create-slides', methods=['GET', 'POST'])
 @login_required
 def create_slides():
-    if request.method == 'GET':
-        return render_template('create_slides.html')
-        
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
+    if request.method == 'POST':
+        try:
+            topic = request.form.get('topic')
+            num_slides = int(request.form.get('num_slides', 6))
             
-        # Get credentials
-        credentials = credentials_from_session()
-        if not credentials:
-            return jsonify({'error': 'Not authenticated with Google'}), 401
-
-        title = data.get('title', 'Untitled Presentation')
-        topic = data.get('topic', '')
-        num_slides = min(max(int(data.get('num_slides', 10)), 5), 20)  # Limit between 5-20 slides
-
-        # Create a new presentation record
-        presentation = Presentation(
-            user_id=current_user.id,
-            title=title,
-            num_slides=num_slides,
-            status='pending'
-        )
-        db.session.add(presentation)
-        db.session.commit()
-
-        # Create presentation in Google Slides
-        service = build('slides', 'v1', credentials=credentials)
-        slides_presentation = service.presentations().create(body={
-            'title': title
-        }).execute()
-        
-        presentation_id = slides_presentation.get('presentationId')
-        
-        # Generate and add slides
-        slides_content = generate_slides_content(title, topic, num_slides)
-        
-        # Create slides batch request
-        requests = []
-        for i, slide_content in enumerate(slides_content):
-            requests.extend(create_slide(service, presentation_id, slide_content, i))
+            # Get credentials from session
+            if 'credentials' not in session:
+                return redirect(url_for('login'))
             
-        # Execute the requests
-        service.presentations().batchUpdate(
-            presentationId=presentation_id,
-            body={'requests': requests}
-        ).execute()
-
-        # Update our presentation record
-        presentation.google_presentation_id = presentation_id
-        presentation.num_slides = len(slides_content)
-        presentation.status = 'completed'
-        db.session.commit()
-
-        logger.info(f"Created presentation with ID: {presentation.id}")
-        return jsonify({
-            'presentation_id': presentation.id,
-            'google_presentation_id': presentation_id
-        })
-
-    except Exception as e:
-        logger.error(f"Error creating slides: {str(e)}")
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+            credentials = Credentials(**session['credentials'])
+            service = build('slides', 'v1', credentials=credentials)
+            
+            # Create a new presentation
+            presentation = service.presentations().create(
+                body={'title': f'Presentation about {topic}'}
+            ).execute()
+            presentation_id = presentation.get('presentationId')
+            
+            # Generate slides content
+            slides_content = generate_slides_content(presentation['title'], topic, num_slides)
+            
+            # Create each slide
+            for i, slide_content in enumerate(slides_content):
+                create_slide(service, presentation_id, slide_content, i)
+            
+            # Get the presentation URL
+            presentation_url = f"https://docs.google.com/presentation/d/{presentation_id}/edit"
+            
+            return jsonify({
+                'success': True,
+                'presentation_url': presentation_url
+            })
+            
+        except Exception as e:
+            logger.error(f"Error creating slides: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    return render_template('create_slides.html')
 
 @app.route('/presentation/<int:presentation_id>')
 @login_required
