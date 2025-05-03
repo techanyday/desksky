@@ -2,16 +2,18 @@ import os
 import json
 import logging
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, abort
-from flask_login import LoginManager, UserMixin, login_user, login_required, current_user, logout_user
+from functools import wraps
+from urllib.parse import urlencode
+
+import openai
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, abort
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
-import openai
-from openai import OpenAI
-import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
