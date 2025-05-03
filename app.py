@@ -15,6 +15,7 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
+from google.auth.transport.requests import Request
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -120,18 +121,35 @@ def load_user(user_id):
 
 def credentials_from_session():
     """Get OAuth2 credentials from the session."""
-    if 'credentials' not in session:
+    if not session.get('credentials'):
         return None
+    
+    try:
+        credentials_dict = session['credentials']
+        credentials = Credentials(
+            token=credentials_dict['token'],
+            refresh_token=credentials_dict['refresh_token'],
+            token_uri=credentials_dict['token_uri'],
+            client_id=GOOGLE_CLIENT_CONFIG['web']['client_id'],
+            client_secret=GOOGLE_CLIENT_CONFIG['web']['client_secret'],
+            scopes=credentials_dict['scopes']
+        )
         
-    creds_data = session['credentials']
-    return Credentials(
-        token=creds_data['token'],
-        refresh_token=creds_data['refresh_token'],
-        token_uri=creds_data['token_uri'],
-        client_id=GOOGLE_CLIENT_CONFIG['web']['client_id'],
-        client_secret=GOOGLE_CLIENT_CONFIG['web']['client_secret'],
-        scopes=creds_data['scopes']
-    )
+        # Check if token needs refresh
+        if not credentials.valid:
+            credentials.refresh(Request())
+            session['credentials'] = {
+                'token': credentials.token,
+                'refresh_token': credentials.refresh_token,
+                'token_uri': credentials.token_uri,
+                'scopes': credentials.scopes
+            }
+        
+        return credentials
+    except Exception as e:
+        app.logger.error(f"Error getting credentials from session: {str(e)}")
+        session.pop('credentials', None)  # Clear invalid credentials
+        return None
 
 # Ensure database is created with proper schema
 def init_db():
@@ -205,6 +223,23 @@ def transform_slide_content(slide):
                             'text': main_points[1]
                         }
                     })
+            elif layout == 'SECTION_HEADER':
+                # For section headers (agenda, conclusion), use first point as title
+                text_requests.append({
+                    'insertText': {
+                        'objectId': '{{TITLE}}',
+                        'text': main_points[0]
+                    }
+                })
+                if len(main_points) > 1:
+                    # Add remaining points as subtitle in a bulleted list
+                    bullet_points = '\n• ' + '\n• '.join(main_points[1:])
+                    text_requests.append({
+                        'insertText': {
+                            'objectId': '{{SUBTITLE}}',
+                            'text': bullet_points.strip()
+                        }
+                    })
             else:
                 # For other slides, first point is title, rest are bullet points
                 text_requests.append({
@@ -237,7 +272,8 @@ def transform_slide_content(slide):
                 'createSlide': {
                     'slideLayoutReference': {
                         'predefinedLayout': 'TITLE_AND_BODY'
-                    }
+                    },
+                    'placeholderIdMappings': []
                 }
             },
             'text_requests': []
@@ -246,16 +282,26 @@ def transform_slide_content(slide):
 def generate_slide_content_with_gpt(title, topic, num_slides):
     """Generate slide content using GPT-3"""
     try:
-        prompt = f"""Create a detailed presentation outline about {topic} with {num_slides} slides.
-        Return a JSON array where each object represents a slide with:
-        - "type": one of ["TITLE", "AGENDA", "BODY", "EXAMPLES", "CONCLUSION", "REFERENCES"]
-        - "main_points": array of bullet points for that slide
-        
-        For references, DO NOT use quotes in the titles, use plain text. Example:
-        {{"type": "REFERENCES", "main_points": ["1. Book Title by Author", "2. Article Name by Publisher"]}}
-        
-        Return ONLY the JSON array, no other text."""
-        
+        prompt = f"""Create a presentation about '{title}' with {num_slides} slides.
+        Return a JSON object with a 'slides' array. Each slide must have:
+        1. 'type': one of ['TITLE', 'AGENDA', 'BODY', 'EXAMPLES', 'CONCLUSION']
+        2. 'main_points': array of strings
+
+        First slide must be TITLE, second AGENDA, last CONCLUSION.
+        Format exactly like this, with no other text:
+        {{
+            "slides": [
+                {{
+                    "type": "TITLE",
+                    "main_points": ["Title"]
+                }},
+                {{
+                    "type": "AGENDA",
+                    "main_points": ["Point 1", "Point 2"]
+                }}
+            ]
+        }}"""
+
         response = openai.Completion.create(
             model="gpt-3.5-turbo-instruct",
             prompt=prompt,
@@ -263,50 +309,91 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
             temperature=0.7
         )
         
-        app.logger.info(f"OpenAI raw response: {json.dumps(response, indent=2)}")
+        if not response or not response.choices:
+            app.logger.error("Empty response from OpenAI")
+            return None
+            
+        # Get the content
         content = response.choices[0].text.strip()
-        app.logger.info(f"Raw content: {content}")
-        
-        # Clean up the content
+        if not content:
+            app.logger.error("Empty content from GPT")
+            return None
+
+        # Clean special characters
         content = (content
-            .replace('"', '"')  # Replace smart quotes
-            .replace('"', '"')  # Replace smart quotes
-            .replace(''', "'")  # Replace smart apostrophes
-            .replace(''', "'")  # Replace smart apostrophes
-            .replace('…', '...') # Replace ellipsis
-            .replace('–', '-')  # Replace en dash
-            .replace('—', '-')  # Replace em dash
+            .replace('"', '"')
+            .replace('"', '"')
+            .replace(''', "'")
+            .replace(''', "'")
+            .replace('…', '...')
+            .replace('–', '-')
+            .replace('—', '-')
         )
         
-        # Remove any BOM or invisible characters
+        # Remove code blocks if present
+        content = re.sub(r'```json\s*|\s*```', '', content)
+        
+        # Remove any non-ASCII characters
         content = ''.join(char for char in content if ord(char) < 128)
         
-        app.logger.info(f"Cleaned content: {content}")
+        # Remove log lines and clean up JSON
+        lines = []
+        for line in content.splitlines():
+            line = line.strip()
+            if line and not line.startswith('info') and not line.startswith('error'):
+                lines.append(line)
+        content = '\n'.join(lines)
         
-        # Parse the JSON
         try:
-            slides = json.loads(content)
-            if not isinstance(slides, list):
-                raise ValueError("Response is not a list")
-            return slides
+            # Parse the JSON
+            data = json.loads(content)
+            
+            # Extract slides array
+            if isinstance(data, dict) and 'slides' in data:
+                slides = data['slides']
+            elif isinstance(data, list):
+                slides = data
+            else:
+                app.logger.error("Invalid response format")
+                return None
+            
+            # Process slides
+            processed_slides = []
+            for slide in slides:
+                if not isinstance(slide, dict):
+                    continue
+                    
+                slide_type = slide.get('type')
+                points = slide.get('main_points', [])
+                
+                if not slide_type or not points or not isinstance(points, list):
+                    continue
+                
+                # Clean points
+                cleaned_points = []
+                for point in points:
+                    if point and isinstance(point, str):
+                        cleaned_point = point.strip()
+                        if cleaned_point:
+                            cleaned_points.append(cleaned_point)
+                
+                if cleaned_points:
+                    processed_slides.append({
+                        'type': slide_type,
+                        'main_points': cleaned_points
+                    })
+            
+            if not processed_slides:
+                app.logger.error("No valid slides after processing")
+                return None
+                
+            return processed_slides
+            
         except json.JSONDecodeError as e:
             app.logger.error(f"JSON parsing error: {str(e)}")
             app.logger.error(f"Content that failed to parse: {content}")
-            # Try to fix common JSON issues
-            content = content.strip()
-            if not content.startswith('['):
-                content = '[' + content
-            if not content.endswith(']'):
-                content = content + ']'
-            # Try parsing again
-            try:
-                slides = json.loads(content)
-                if not isinstance(slides, list):
-                    raise ValueError("Response is not a list")
-                return slides
-            except:
-                return None
-
+            return None
+            
     except Exception as e:
         app.logger.error(f"Error generating slide content: {str(e)}")
         return None
@@ -502,7 +589,15 @@ def logout():
 @app.route('/oauth2callback')
 def oauth2callback():
     try:
+        # Get state from session
         state = session.get('state')
+        if not state:
+            raise ValueError("Missing state parameter")
+
+        # Verify state matches
+        if state != request.args.get('state'):
+            raise ValueError("Invalid state parameter")
+
         flow = Flow.from_client_config(
             GOOGLE_CLIENT_CONFIG,
             scopes=OAUTH_SCOPES,
@@ -528,6 +623,9 @@ def oauth2callback():
         user_info = service.userinfo().get().execute()
         email = user_info.get('email')
         
+        if not email:
+            raise ValueError("Could not get user email from Google")
+        
         app.logger.info(f"Retrieved user info for email: {email}")
         
         # Create or get user
@@ -541,11 +639,17 @@ def oauth2callback():
         login_user(user)
         app.logger.info(f"Successfully logged in user: {email}")
         
+        # Clear state from session
+        session.pop('state', None)
+        
         return redirect(url_for('index'))
         
     except Exception as e:
-        app.logger.error(f"Error in OAuth callback: {str(e)}")
-        return f"Error: {str(e)}", 500
+        app.logger.error(f"Error in OAuth callback: {str(e)}", exc_info=True)
+        session.pop('state', None)  # Clear state on error
+        session.pop('credentials', None)  # Clear credentials on error
+        flash('Authentication failed. Please try again.', 'error')
+        return redirect(url_for('login'))
 
 def check_user_credits(user, num_slides):
     if user.subscription_status == 'premium':
