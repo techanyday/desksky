@@ -22,13 +22,11 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
 
-# Set OpenAI configuration via environment variables
-os.environ["OPENAI_API_BASE"] = "https://api.openai.com/v1"
-os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "")
-os.environ["OPENAI_TIMEOUT_SECONDS"] = "60"
+# Set OpenAI API key
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Initialize OpenAI client
-client = OpenAI()
+# Initialize OpenAI client for legacy compatibility
+client = openai
 
 # Database configuration
 if os.environ.get('DATABASE_URL'):
@@ -165,158 +163,35 @@ def index():
     return render_template('index.html')
 
 def generate_slide_content_with_gpt(topic, slide_type):
-    """Generate slide content using GPT-3.5 Turbo."""
-    
-    # Define prompts for different slide types
-    prompts = {
-        "TITLE": f"Create a professional title slide for a presentation about {topic}. Return a JSON with 'title' and 'subtitle' only. Keep it concise and impactful.",
-        
-        "AGENDA": f"Create an agenda slide for a presentation about {topic}. Return a JSON with 4-5 key topics as bullet points that will be covered. Format as 'title' and 'bullets' list.",
-        
-        "LANDSCAPE": f"Create a current landscape slide about {topic}. Focus on latest developments, market size, and key players. Return as JSON with 'title' and two sections: 'current_state' and 'market_dynamics', each with 3 bullet points.",
-        
-        "IMPLEMENTATION": f"Create an implementation strategy slide for {topic}. Return JSON with 'title' and three phases: 'assessment', 'deployment', and 'optimization', each with 3 specific bullet points.",
-        
-        "ROI_METRICS": f"Create a metrics slide for {topic} with 3 key performance indicators. Return JSON with 'title' and 'metrics' array containing 3 objects, each with 'label', 'value', and 'description'.",
-        
-        "CONCLUSION": f"Create a conclusion slide for {topic} with key takeaways and next steps. Return JSON with 'title', 'takeaways' list (3 points), and 'next_steps' list (3 points)."
-    }
-    
-    if slide_type not in prompts:
-        return None
-        
     try:
-        # Call GPT-3.5 Turbo
-        response = client.chat.completions.create(
+        # Use legacy OpenAI API
+        response = client.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are a professional presentation content generator. Return only JSON format with the requested fields. Keep content concise and business-appropriate."},
-                {"role": "user", "content": prompts[slide_type]}
-            ],
-            temperature=0.7
+                {"role": "system", "content": "You are a professional presentation content creator."},
+                {"role": "user", "content": f"Create content for a {slide_type} slide about {topic}. Format: JSON with 'title' and 'content' keys."}
+            ]
         )
-        
-        # Parse the response
-        content = json.loads(response.choices[0].message.content)
-        
-        # Transform GPT response into slide format
-        if slide_type == "TITLE":
-            return {
-                'layout': 'TITLE_HERO',
-                'title': content['title'],
-                'subtitle': content['subtitle'],
-                'footer': 'Powered by DeckSky AI'
-            }
-            
-        elif slide_type == "AGENDA":
-            return {
-                'layout': 'SECTION_HEADER',
-                'title': content['title'],
-                'elements': [{
-                    'shape': 'ROUNDED_RECTANGLE',
-                    'text': '📋 Key Topics\n\n• ' + '\n• '.join(content['bullets']),
-                    'style': {'alignment': 'START', 'accent_color': '#4285f4'}
-                }]
-            }
-            
-        elif slide_type == "LANDSCAPE":
-            return {
-                'layout': 'TWO_COLUMNS_WITH_HEADER',
-                'title': content['title'],
-                'elements': [
-                    {
-                        'shape': 'RECTANGLE',
-                        'text': '🔄 Current State\n\n• ' + '\n• '.join(content['current_state']),
-                        'style': {'alignment': 'START', 'accent_color': '#34a853'}
-                    },
-                    {
-                        'shape': 'RECTANGLE',
-                        'text': '🎯 Market Dynamics\n\n• ' + '\n• '.join(content['market_dynamics']),
-                        'style': {'alignment': 'START', 'accent_color': '#ea4335'}
-                    }
-                ]
-            }
-            
-        elif slide_type == "IMPLEMENTATION":
-            return {
-                'layout': 'THREE_SECTION_GRID',
-                'title': content['title'],
-                'elements': [
-                    {
-                        'shape': 'ROUNDED_RECTANGLE',
-                        'text': '1️⃣ Assessment\n\n• ' + '\n• '.join(content['assessment']),
-                        'style': {'alignment': 'START', 'accent_color': '#fbbc05'}
-                    },
-                    {
-                        'shape': 'ROUNDED_RECTANGLE',
-                        'text': '2️⃣ Deployment\n\n• ' + '\n• '.join(content['deployment']),
-                        'style': {'alignment': 'START', 'accent_color': '#4285f4'}
-                    },
-                    {
-                        'shape': 'ROUNDED_RECTANGLE',
-                        'text': '3️⃣ Optimization\n\n• ' + '\n• '.join(content['optimization']),
-                        'style': {'alignment': 'START', 'accent_color': '#34a853'}
-                    }
-                ]
-            }
-            
-        elif slide_type == "ROI_METRICS":
-            return {
-                'layout': 'METRICS_DASHBOARD',
-                'title': content['title'],
-                'elements': [
-                    {
-                        'shape': 'CIRCLE',
-                        'text': f"📈 {metric['label']}\n\n{metric['value']}\n{metric['description']}",
-                        'style': {'alignment': 'CENTER', 'accent_color': '#4285f4'}
-                    }
-                    for i, metric in enumerate(content['metrics'])
-                ]
-            }
-            
-        elif slide_type == "CONCLUSION":
-            return {
-                'layout': 'CALL_TO_ACTION',
-                'title': content['title'],
-                'elements': [
-                    {
-                        'shape': 'ACTION_CARD',
-                        'text': '🚀 Key Takeaways\n\n• ' + '\n• '.join(content['takeaways']),
-                        'style': {'alignment': 'START', 'accent_color': '#4285f4'}
-                    },
-                    {
-                        'shape': 'ACTION_CARD',
-                        'text': '📅 Next Steps\n\n• ' + '\n• '.join(content['next_steps']),
-                        'style': {'alignment': 'START', 'accent_color': '#34a853'}
-                    }
-                ]
-            }
-            
+        return json.loads(response.choices[0].message.content)
     except Exception as e:
-        print(f"Error generating content with GPT: {str(e)}")
-        return None
+        logger.error(f"Error generating slide content: {str(e)}")
+        raise
 
 def generate_slides_content(title, topic, num_slides):
     """Generate a complete, professional slide deck with GPT-3.5 Turbo."""
-    slides = []
-    
-    # Core slide types in presentation order
-    core_slides = [
-        "TITLE",
-        "AGENDA",
-        "LANDSCAPE",
-        "IMPLEMENTATION",
-        "ROI_METRICS",
-        "CONCLUSION"
-    ]
-    
-    # Generate all slides using GPT-3.5 Turbo
-    for slide_type in core_slides[:num_slides]:
-        content = generate_slide_content_with_gpt(topic, slide_type)
-        if content:
-            slides.append(content)
-    
-    return slides
+    try:
+        # Use legacy OpenAI API
+        response = client.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a professional presentation content creator."},
+                {"role": "user", "content": f"Create an outline for a {num_slides}-slide presentation about {topic}. For each slide, specify the type (TITLE, AGENDA, LANDSCAPE, IMPLEMENTATION, ROI_METRICS, or CONCLUSION) and main points. Format as JSON array."}
+            ]
+        )
+        return json.loads(response.choices[0].message.content)
+    except Exception as e:
+        logger.error(f"Error generating slides content: {str(e)}")
+        raise
 
 def create_layout_request(layout_type, slide_id, elements):
     """Create sophisticated layout requests with proper visual hierarchy."""
