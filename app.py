@@ -335,13 +335,15 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
     try:
         # Create system prompt
         system_prompt = """You are a presentation content generator. Create professional presentation content based on the given title and topic.
-        Format the response as a list of JSON objects, one for each slide. Each slide should have:
-        - "title": A clear, concise title
+        Format the response as a list of JSON objects, one for each slide. Each slide MUST have these exact fields:
+        - "title": A clear, concise title for the slide
         - "content": A list of bullet points (3-5 points per slide)
         
         The first slide should be a title slide, and the last slide should be a summary/conclusion slide.
         Keep bullet points concise and impactful.
+        Do not include any other fields in the slide objects.
         Avoid using special characters or apostrophes that might cause JSON parsing issues.
+        
         Example format:
         [
             {
@@ -352,7 +354,14 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
                     "Historical development"
                 ]
             }
-        ]"""
+        ]
+        
+        Important:
+        1. Each slide MUST have both 'title' and 'content' fields
+        2. The 'content' field MUST be a list of strings
+        3. Do not include any other fields
+        4. Use simple quotes for strings
+        5. Keep text content simple and clean - no special characters"""
 
         # Create user prompt
         user_prompt = f"Create a {num_slides}-slide presentation about '{title}'. Topic focus: {topic}"
@@ -370,18 +379,37 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
         # Parse and validate the response
         content = completion.choices[0].message.content
         app.logger.info(f"GPT Response: {content}")  # Log the response
+        
+        # Clean up the response - remove any markdown code block markers
+        content = content.replace("```json", "").replace("```", "").strip()
+        
+        # Parse JSON
         slides = json.loads(content)
-
-        # Process slides
+        
+        # Validate slides
+        if not isinstance(slides, list):
+            raise ValueError("GPT response is not a list of slides")
+            
+        # Process and validate each slide
         processed_slides = []
         for i, slide in enumerate(slides):
+            if not isinstance(slide, dict):
+                raise ValueError(f"Slide {i} is not a dictionary")
+            if 'title' not in slide:
+                raise ValueError(f"Slide {i} missing title field")
+            if 'content' not in slide:
+                raise ValueError(f"Slide {i} missing content field")
+            if not isinstance(slide['content'], list):
+                raise ValueError(f"Slide {i} content is not a list")
+                
             processed_slide = {
                 'id': f'slide_{i+1}',
-                'title': slide.get('title', '').strip(),
-                'content': [point.strip() for point in slide.get('content', [])]
+                'title': slide['title'].strip(),
+                'content': [point.strip() for point in slide['content']]
             }
             processed_slides.append(processed_slide)
-
+            
+        app.logger.info(f"Processed slides: {json.dumps(processed_slides, indent=2)}")
         return processed_slides
 
     except json.JSONDecodeError as e:

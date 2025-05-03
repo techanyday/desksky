@@ -174,14 +174,30 @@ class SlidesGenerator:
             if not slide_content:
                 raise ValueError("Failed to generate slide content")
 
+            # Log slide content for debugging
+            logger.info(f"Generated slide content: {json.dumps(slide_content, indent=2)}")
+
             # Transform all slides to requests
             all_requests = []
             for i, slide in enumerate(slide_content):
+                # Validate slide structure
+                if not isinstance(slide, dict):
+                    raise ValueError(f"Invalid slide format at index {i}: {slide}")
+                if 'title' not in slide:
+                    raise ValueError(f"Missing title in slide at index {i}: {slide}")
+                if 'content' not in slide:
+                    raise ValueError(f"Missing content in slide at index {i}: {slide}")
+
                 # Add slide ID if not present
                 if 'id' not in slide:
                     slide['id'] = f'slide_{i+1}'
+
+                # Transform slide
                 slide_requests = self.transform_slide_to_requests(slide)
                 all_requests.extend(slide_requests)
+
+            # Log requests for debugging
+            logger.info(f"Generated {len(all_requests)} API requests")
 
             # Execute the requests
             if all_requests:
@@ -199,6 +215,16 @@ class SlidesGenerator:
     def transform_slide_to_requests(self, slide):
         """Transform a slide into Google Slides API requests."""
         try:
+            # Validate slide data
+            if not isinstance(slide, dict):
+                raise ValueError(f"Invalid slide format: {slide}")
+            if 'id' not in slide:
+                raise ValueError(f"Missing slide ID: {slide}")
+            if 'title' not in slide:
+                raise ValueError(f"Missing slide title: {slide}")
+            if 'content' not in slide:
+                raise ValueError(f"Missing slide content: {slide}")
+
             requests = []
             
             # Create a new slide
@@ -277,6 +303,7 @@ class SlidesGenerator:
             return requests
         except Exception as e:
             logger.error(f"Error transforming slide: {str(e)}")
+            logger.error(f"Problematic slide data: {json.dumps(slide, indent=2)}")
             raise ValueError(f"Failed to transform slide: {str(e)}") from e
 
     def _create_title_slide(self, title, subtitle=None, slide_id=None):
