@@ -99,15 +99,9 @@ class SlidesGenerator:
             'updatePageProperties': {
                 'objectId': slide_id,
                 'pageProperties': {
-                    'pageBackgroundFill': {
-                        'solidFill': {
-                            'color': {
-                                'rgbColor': self.theme['rgb_colors']['background']
-                            }
-                        }
-                    }
+                    'pageBackgroundFill': self._create_color_style(self.theme['rgb_colors']['background'])
                 },
-                'fields': 'pageBackgroundFill.solidFill.color'
+                'fields': 'pageBackgroundFill'
             }
         })
         
@@ -117,22 +111,27 @@ class SlidesGenerator:
                 'updateTextStyle': {
                     'objectId': f"{slide_id}_title",
                     'style': {
-                        'foregroundColor': {
-                            'rgbColor': self.theme['rgb_colors']['title_text']
-                        }
+                        'foregroundColor': self._create_color_style(self.theme['rgb_colors']['title_text'])['solidFill']['color'],
+                        'fontSize': {
+                            'magnitude': 24,
+                            'unit': 'PT'
+                        },
+                        'bold': True
                     },
-                    'fields': 'foregroundColor'
+                    'fields': 'foregroundColor,fontSize,bold'
                 }
             },
             {
                 'updateTextStyle': {
                     'objectId': f"{slide_id}_body",
                     'style': {
-                        'foregroundColor': {
-                            'rgbColor': self.theme['rgb_colors']['body_text']
+                        'foregroundColor': self._create_color_style(self.theme['rgb_colors']['body_text'])['solidFill']['color'],
+                        'fontSize': {
+                            'magnitude': 18,
+                            'unit': 'PT'
                         }
                     },
-                    'fields': 'foregroundColor'
+                    'fields': 'foregroundColor,fontSize'
                 }
             }
         ])
@@ -142,19 +141,33 @@ class SlidesGenerator:
             'updateShapeProperties': {
                 'objectId': slide_id,
                 'shapeProperties': {
-                    'shapeFill': {
-                        'solidFill': {
-                            'color': {
-                                'rgbColor': self.theme['rgb_colors']['shape_fill']
-                            }
-                        }
-                    }
+                    'shapeBackgroundFill': self._create_color_style(self.theme['rgb_colors']['background'])
                 },
-                'fields': 'shapeFill.solidFill.color'
+                'fields': 'shapeBackgroundFill'
             }
         })
         
         return requests
+
+    def _create_color_style(self, hex_color):
+        """Convert hex color to Google Slides RGB format."""
+        rgb = self._hex_to_rgb(hex_color)
+        return {
+            'solidFill': {
+                'color': {
+                    'rgbColor': {
+                        'red': rgb[0] / 255,
+                        'green': rgb[1] / 255,
+                        'blue': rgb[2] / 255
+                    }
+                }
+            }
+        }
+
+    def _hex_to_rgb(self, hex_color):
+        """Convert hex color to RGB."""
+        hex_color = hex_color.lstrip('#')
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
     def create_presentation(self, title, num_slides):
         """Create a Google Slides presentation"""
@@ -315,107 +328,91 @@ class SlidesGenerator:
         return requests
 
     def transform_slide_to_requests(self, slide):
-        """Transform slide content into Google Slides API requests"""
-        try:
-            requests = []
-            slide_type = slide.get('type', '').upper()
-            
-            # Process based on slide type
-            if slide_type == 'TITLE':
-                requests.extend([
-                    {
-                        'insertText': {
-                            'objectId': '{{TITLE}}',
-                            'text': slide.get('title', '')
-                        }
-                    },
-                    {
-                        'insertText': {
-                            'objectId': '{{SUBTITLE}}',
-                            'text': slide.get('subtitle', '')
-                        }
-                    }
-                ])
-                if slide.get('presenter'):
-                    requests.append({
-                        'insertText': {
-                            'objectId': '{{BODY}}',
-                            'text': f"Presenter: {slide.get('presenter')}"
-                        }
-                    })
-                if slide.get('date'):
-                    requests.append({
-                        'insertText': {
-                            'objectId': '{{FOOTER}}',
-                            'text': f"Date: {slide.get('date')}"
-                        }
-                    })
-            elif slide_type in ['SECTION', 'BODY', 'CONTENT']:
-                requests.extend([
-                    {
-                        'insertText': {
-                            'objectId': '{{TITLE}}',
-                            'text': slide.get('title', '')
-                        }
-                    }
-                ])
-                if slide.get('points'):
-                    bullet_points = '\n• ' + '\n• '.join(slide.get('points'))
-                    requests.append({
-                        'insertText': {
-                            'objectId': '{{BODY}}',
-                            'text': bullet_points.strip()
-                        }
-                    })
-                if slide.get('visual_guidance'):
-                    requests.append({
-                        'insertText': {
-                            'objectId': '{{FOOTER}}',
-                            'text': f"Visual Guidance: {slide.get('visual_guidance')}"
-                        }
-                    })
-            elif slide_type == 'SUMMARY':
-                requests.extend([
-                    {
-                        'insertText': {
-                            'objectId': '{{TITLE}}',
-                            'text': slide.get('title', 'Key Takeaways')
-                        }
-                    }
-                ])
-                if slide.get('points'):
-                    bullet_points = '\n• ' + '\n• '.join(slide.get('points'))
-                    requests.append({
-                        'insertText': {
-                            'objectId': '{{BODY}}',
-                            'text': bullet_points.strip()
-                        }
-                    })
-            elif slide_type == 'CLOSING':
-                requests.extend([
-                    {
-                        'insertText': {
-                            'objectId': '{{TITLE}}',
-                            'text': slide.get('title', 'Thank You')
-                        }
-                    },
-                    {
-                        'insertText': {
-                            'objectId': '{{SUBTITLE}}',
-                            'text': slide.get('subtitle', '')
-                        }
-                    }
-                ])
-                if slide.get('contact'):
-                    requests.append({
-                        'insertText': {
-                            'objectId': '{{FOOTER}}',
-                            'text': f"Contact: {slide.get('contact')}"
-                        }
-                    })
+        """Transform a slide into Google Slides API requests."""
+        requests = []
+        
+        # Create a new slide
+        requests.append({
+            'createSlide': {
+                'objectId': slide['id'],
+                'slideLayoutReference': {
+                    'predefinedLayout': 'TITLE_AND_BODY'
+                }
+            }
+        })
+        
+        # Update slide background
+        requests.append({
+            'updatePageProperties': {
+                'objectId': slide['id'],
+                'pageProperties': {
+                    'pageBackgroundFill': self._create_color_style(self.theme['rgb_colors']['background'])
+                },
+                'fields': 'pageBackgroundFill'
+            }
+        })
 
-            return requests
+        # Update title
+        title_id = f"{slide['id']}_title"
+        requests.append({
+            'insertText': {
+                'objectId': title_id,
+                'text': slide['title']
+            }
+        })
+        
+        # Update title style
+        requests.append({
+            'updateTextStyle': {
+                'objectId': title_id,
+                'style': {
+                    'foregroundColor': self._create_color_style(self.theme['rgb_colors']['title_text'])['solidFill']['color'],
+                    'fontSize': {
+                        'magnitude': 24,
+                        'unit': 'PT'
+                    },
+                    'bold': True
+                },
+                'fields': 'foregroundColor,fontSize,bold'
+            }
+        })
 
-        except Exception as e:
-            print(f"Error transforming slide: {str(e)}")
-            return None
+        # Update body
+        body_id = f"{slide['id']}_body"
+        bullet_points = [f"• {point}" for point in slide['content']]
+        body_text = "\n".join(bullet_points)
+        
+        requests.append({
+            'insertText': {
+                'objectId': body_id,
+                'text': body_text
+            }
+        })
+        
+        # Update body text style
+        requests.append({
+            'updateTextStyle': {
+                'objectId': body_id,
+                'style': {
+                    'foregroundColor': self._create_color_style(self.theme['rgb_colors']['body_text'])['solidFill']['color'],
+                    'fontSize': {
+                        'magnitude': 18,
+                        'unit': 'PT'
+                    }
+                },
+                'fields': 'foregroundColor,fontSize'
+            }
+        })
+
+        # Update shape properties for body placeholder
+        requests.append({
+            'updateShapeProperties': {
+                'objectId': body_id,
+                'shapeProperties': {
+                    'shapeBackgroundFill': self._create_color_style(self.theme['rgb_colors']['background'])
+                },
+                'fields': 'shapeBackgroundFill'
+            }
+        })
+
+        return requests
