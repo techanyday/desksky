@@ -1,80 +1,142 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
-    <div class="bg-white rounded-lg shadow-lg p-6">
-        <h1 class="text-2xl font-bold mb-6">Create Presentation</h1>
-        
-        <form id="create-slides-form" class="space-y-4">
-            <div>
-                <label for="title" class="block text-sm font-medium text-gray-700">Presentation Title</label>
-                <input type="text" name="title" id="title" required
-                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-            </div>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="text-center">Create Presentation</h3>
+                </div>
+                <div class="card-body">
+                    <form id="presentationForm" method="POST">
+                        <div class="form-group mb-3">
+                            <label for="title">Presentation Title</label>
+                            <input type="text" class="form-control" id="title" name="title" required>
+                        </div>
+                        
+                        <div class="form-group mb-3">
+                            <label for="numSlides">Number of Slides</label>
+                            <input type="number" class="form-control" id="numSlides" name="numSlides" value="8" min="8" max="15">
+                        </div>
+                        
+                        <div class="form-group mb-3">
+                            <label for="themeSelect">Color Theme</label>
+                            <select class="form-control" id="themeSelect" name="themeId">
+                                <!-- Themes will be populated via JavaScript -->
+                            </select>
+                            <small class="form-text text-muted">
+                                Select a color scheme for your presentation
+                            </small>
+                        </div>
 
-            <div>
-                <label for="topic" class="block text-sm font-medium text-gray-700">Topic or Description</label>
-                <textarea name="topic" id="topic" rows="4" required
-                          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
-            </div>
-
-            <div>
-                <label for="num_slides" class="block text-sm font-medium text-gray-700">Number of Slides</label>
-                <div class="mt-1 flex items-center space-x-2">
-                    <input type="range" name="num_slides" id="num_slides" min="5" max="20" value="10"
-                           class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                    <span id="num_slides_value" class="text-sm text-gray-600 w-12 text-center">10</span>
+                        <div class="theme-preview mt-3 mb-3 p-3 rounded" style="display: none;">
+                            <h5>Theme Preview</h5>
+                            <div class="preview-box p-2 mb-2">
+                                <div class="preview-title"></div>
+                                <div class="preview-body"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-primary">Generate Presentation</button>
+                        </div>
+                    </form>
                 </div>
             </div>
-
-            <div>
-                <button type="submit" id="submit-btn" 
-                        class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                    Create Slides
-                </button>
-            </div>
-        </form>
-
-        <div id="loading" class="hidden mt-4">
-            <p class="text-center text-gray-600">Creating your presentation...</p>
         </div>
     </div>
 </div>
 
-<script>
-// Update slide count display
-document.getElementById('num_slides').addEventListener('input', function(e) {
-    document.getElementById('num_slides_value').textContent = e.target.value;
-});
+<style>
+.theme-preview {
+    border: 1px solid #ddd;
+}
+.preview-box {
+    min-height: 100px;
+}
+.preview-title {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+.preview-body {
+    font-size: 1em;
+}
+</style>
 
-document.getElementById('create-slides-form').addEventListener('submit', function(e) {
-    e.preventDefault();
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const themeSelect = document.getElementById('themeSelect');
+    const themePreview = document.querySelector('.theme-preview');
+    const previewBox = document.querySelector('.preview-box');
+    const previewTitle = document.querySelector('.preview-title');
+    const previewBody = document.querySelector('.preview-body');
     
-    // Show loading state
-    document.getElementById('submit-btn').disabled = true;
-    document.getElementById('submit-btn').innerHTML = 'Creating slides...';
+    // Fetch available themes
+    fetch('/api/themes')
+        .then(response => response.json())
+        .then(data => {
+            data.themes.forEach(theme => {
+                const option = document.createElement('option');
+                option.value = theme.id;
+                option.textContent = `${theme.name} - ${theme.description}`;
+                themeSelect.appendChild(option);
+            });
+        })
+        .catch(error => console.error('Error loading themes:', error));
     
-    fetch('/create-slides', {
-        method: 'POST',
-        body: new FormData(this)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Redirect to the Google Slides presentation
-            window.location.href = data.presentation_url;
-        } else {
-            alert('Error: ' + data.error);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('An error occurred while creating the slides');
-    })
-    .finally(() => {
-        // Reset button state
-        document.getElementById('submit-btn').disabled = false;
-        document.getElementById('submit-btn').innerHTML = 'Create Slides';
+    // Handle theme selection change
+    themeSelect.addEventListener('change', function() {
+        const selectedTheme = this.value;
+        themePreview.style.display = 'block';
+        
+        // Update preview with theme colors
+        fetch('/api/themes')
+            .then(response => response.json())
+            .then(data => {
+                const theme = data.themes.find(t => t.id === selectedTheme);
+                if (theme) {
+                    previewBox.style.backgroundColor = theme.colors.background;
+                    previewTitle.style.color = theme.colors.title_text;
+                    previewBody.style.color = theme.colors.body_text;
+                    
+                    // Show sample content
+                    previewTitle.textContent = 'Sample Title';
+                    previewBody.innerHTML = '• Sample bullet point<br>• Another bullet point';
+                }
+            });
+    });
+    
+    // Handle form submission
+    document.getElementById('presentationForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            title: document.getElementById('title').value,
+            num_slides: parseInt(document.getElementById('numSlides').value),
+            theme_id: document.getElementById('themeSelect').value
+        };
+        
+        fetch('/api/presentations', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.url) {
+                window.location.href = data.url;
+            } else {
+                alert('Error creating presentation: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error creating presentation');
+        });
     });
 });
 </script>
