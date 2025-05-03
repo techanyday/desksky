@@ -5,7 +5,7 @@
     <div class="bg-white rounded-lg shadow-lg p-6">
         <h1 class="text-2xl font-bold mb-6">Create Presentation</h1>
         
-        <form id="createSlidesForm" class="space-y-4">
+        <form id="create-slides-form" class="space-y-4">
             <div>
                 <label for="title" class="block text-sm font-medium text-gray-700">Presentation Title</label>
                 <input type="text" name="title" id="title" required
@@ -28,9 +28,9 @@
             </div>
 
             <div>
-                <button type="submit" 
+                <button type="submit" id="submit-btn" 
                         class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                    Create Presentation
+                    Create Slides
                 </button>
             </div>
         </form>
@@ -47,45 +47,35 @@ document.getElementById('num_slides').addEventListener('input', function(e) {
     document.getElementById('num_slides_value').textContent = e.target.value;
 });
 
-document.getElementById('createSlidesForm').addEventListener('submit', async function(e) {
+document.getElementById('create-slides-form').addEventListener('submit', function(e) {
     e.preventDefault();
     
-    const form = e.target;
-    const loading = document.getElementById('loading');
-    const submitBtn = form.querySelector('button[type="submit"]');
-    
     // Show loading state
-    loading.classList.remove('hidden');
-    submitBtn.disabled = true;
+    document.getElementById('submit-btn').disabled = true;
+    document.getElementById('submit-btn').innerHTML = 'Creating slides...';
     
-    try {
-        const response = await fetch('/create-slides', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                title: form.title.value,
-                topic: form.topic.value,
-                num_slides: parseInt(form.num_slides.value)
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            // Redirect to the presentation page
-            window.location.href = `/presentation/${data.presentation_id}`;
+    fetch('/create-slides', {
+        method: 'POST',
+        body: new FormData(this)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Redirect to the Google Slides presentation
+            window.location.href = data.presentation_url;
         } else {
-            alert(data.error || 'Failed to create presentation');
+            alert('Error: ' + data.error);
         }
-    } catch (error) {
-        alert('An error occurred while creating the presentation');
+    })
+    .catch(error => {
         console.error('Error:', error);
-    } finally {
-        loading.classList.add('hidden');
-        submitBtn.disabled = false;
-    }
+        alert('An error occurred while creating the slides');
+    })
+    .finally(() => {
+        // Reset button state
+        document.getElementById('submit-btn').disabled = false;
+        document.getElementById('submit-btn').innerHTML = 'Create Slides';
+    });
 });
 </script>
 {% endblock %}

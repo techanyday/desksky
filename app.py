@@ -464,6 +464,9 @@ def create_slides():
             ).execute()
             presentation_id = presentation.get('presentationId')
             
+            if not presentation_id:
+                raise ValueError("Failed to get presentation ID from Google Slides API")
+            
             # Generate slides content
             slides_content = generate_slides_content(presentation['title'], topic, num_slides)
             
@@ -474,9 +477,24 @@ def create_slides():
             # Get the presentation URL
             presentation_url = f"https://docs.google.com/presentation/d/{presentation_id}/edit"
             
+            # Save the presentation to the database
+            try:
+                new_presentation = Presentation(
+                    user_id=current_user.id,
+                    google_presentation_id=presentation_id,
+                    title=f"Presentation about {topic}",
+                    created_at=datetime.utcnow()
+                )
+                db.session.add(new_presentation)
+                db.session.commit()
+            except Exception as e:
+                logger.error(f"Error saving presentation to database: {str(e)}")
+                # Continue even if database save fails
+            
             return jsonify({
                 'success': True,
-                'presentation_url': presentation_url
+                'presentation_url': presentation_url,
+                'presentation_id': presentation_id
             })
             
         except Exception as e:
@@ -488,20 +506,41 @@ def create_slides():
     
     return render_template('create_slides.html')
 
-@app.route('/presentation/<int:presentation_id>')
+@app.route('/presentation/<presentation_id>')
 @login_required
 def view_presentation(presentation_id):
-    presentation = Presentation.query.get_or_404(presentation_id)
-    
-    # Ensure user owns this presentation
-    if presentation.user_id != current_user.id:
-        abort(403)
+    """View a specific presentation."""
+    try:
+        # First check our database
+        presentation = Presentation.query.filter_by(google_presentation_id=presentation_id).first()
         
-    return render_template(
-        'presentation.html',
-        presentation=presentation,
-        google_presentation_url=f"https://docs.google.com/presentation/d/{presentation.google_presentation_id}/edit"
-    )
+        if not presentation:
+            flash('Presentation not found', 'error')
+            return redirect(url_for('index'))
+        
+        # Get credentials from session
+        if 'credentials' not in session:
+            return redirect(url_for('login'))
+        
+        credentials = Credentials(**session['credentials'])
+        service = build('slides', 'v1', credentials=credentials)
+        
+        # Get presentation details from Google Slides
+        presentation_details = service.presentations().get(
+            presentationId=presentation_id
+        ).execute()
+        
+        return render_template(
+            'view_presentation.html',
+            presentation=presentation,
+            google_slides_url=f"https://docs.google.com/presentation/d/{presentation_id}/edit",
+            presentation_details=presentation_details
+        )
+        
+    except Exception as e:
+        logger.error(f"Error viewing presentation: {str(e)}")
+        flash('Error viewing presentation', 'error')
+        return redirect(url_for('index'))
 
 @app.route('/pricing')
 def pricing():
