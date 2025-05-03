@@ -9,6 +9,9 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
+import openai
+from openai import OpenAI
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,6 +21,9 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
+
+# Initialize OpenAI client
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 # Database configuration
 if os.environ.get('DATABASE_URL'):
@@ -153,118 +159,159 @@ init_db()
 def index():
     return render_template('index.html')
 
-def generate_slide_content(topic, slide_type):
-    """Generate topic-specific, professional slide content."""
+def generate_slide_content_with_gpt(topic, slide_type):
+    """Generate slide content using GPT-3.5 Turbo."""
     
-    # Extract key terms for better content generation
-    topic_terms = topic.lower().split()
-    is_ai_related = any(term in ['ai', 'artificial', 'intelligence', 'ml', 'machine'] for term in topic_terms)
-    is_business = any(term in ['business', 'enterprise', 'company', 'market', 'industry'] for term in topic_terms)
+    # Define prompts for different slide types
+    prompts = {
+        "TITLE": f"Create a professional title slide for a presentation about {topic}. Return a JSON with 'title' and 'subtitle' only. Keep it concise and impactful.",
+        
+        "AGENDA": f"Create an agenda slide for a presentation about {topic}. Return a JSON with 4-5 key topics as bullet points that will be covered. Format as 'title' and 'bullets' list.",
+        
+        "LANDSCAPE": f"Create a current landscape slide about {topic}. Focus on latest developments, market size, and key players. Return as JSON with 'title' and two sections: 'current_state' and 'market_dynamics', each with 3 bullet points.",
+        
+        "IMPLEMENTATION": f"Create an implementation strategy slide for {topic}. Return JSON with 'title' and three phases: 'assessment', 'deployment', and 'optimization', each with 3 specific bullet points.",
+        
+        "ROI_METRICS": f"Create a metrics slide for {topic} with 3 key performance indicators. Return JSON with 'title' and 'metrics' array containing 3 objects, each with 'label', 'value', and 'description'.",
+        
+        "CONCLUSION": f"Create a conclusion slide for {topic} with key takeaways and next steps. Return JSON with 'title', 'takeaways' list (3 points), and 'next_steps' list (3 points)."
+    }
     
-    if slide_type == "TITLE":
-        return {
-            'layout': 'TITLE_HERO',
-            'title': topic,
-            'subtitle': 'Strategic Insights & Implementation Guide',
-            'footer': 'Powered by DeckSky AI'
-        }
-    
-    if slide_type == "AGENDA":
-        return {
-            'layout': 'SECTION_HEADER',
-            'title': 'Presentation Overview',
-            'elements': [
-                {
+    if slide_type not in prompts:
+        return None
+        
+    try:
+        # Call GPT-3.5 Turbo
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a professional presentation content generator. Return only JSON format with the requested fields. Keep content concise and business-appropriate."},
+                {"role": "user", "content": prompts[slide_type]}
+            ],
+            temperature=0.7
+        )
+        
+        # Parse the response
+        content = json.loads(response.choices[0].message.content)
+        
+        # Transform GPT response into slide format
+        if slide_type == "TITLE":
+            return {
+                'layout': 'TITLE_HERO',
+                'title': content['title'],
+                'subtitle': content['subtitle'],
+                'footer': 'Powered by DeckSky AI'
+            }
+            
+        elif slide_type == "AGENDA":
+            return {
+                'layout': 'SECTION_HEADER',
+                'title': content['title'],
+                'elements': [{
                     'shape': 'ROUNDED_RECTANGLE',
-                    'text': '📋 Key Topics\n\n• Current Landscape & Opportunities\n• Implementation Strategy\n• Success Metrics & ROI\n• Future Outlook',
+                    'text': '📋 Key Topics\n\n• ' + '\n• '.join(content['bullets']),
                     'style': {'alignment': 'START', 'accent_color': '#4285f4'}
-                }
-            ]
-        }
+                }]
+            }
+            
+        elif slide_type == "LANDSCAPE":
+            return {
+                'layout': 'TWO_COLUMNS_WITH_HEADER',
+                'title': content['title'],
+                'elements': [
+                    {
+                        'shape': 'RECTANGLE',
+                        'text': '🔄 Current State\n\n• ' + '\n• '.join(content['current_state']),
+                        'style': {'alignment': 'START', 'accent_color': '#34a853'}
+                    },
+                    {
+                        'shape': 'RECTANGLE',
+                        'text': '🎯 Market Dynamics\n\n• ' + '\n• '.join(content['market_dynamics']),
+                        'style': {'alignment': 'START', 'accent_color': '#ea4335'}
+                    }
+                ]
+            }
+            
+        elif slide_type == "IMPLEMENTATION":
+            return {
+                'layout': 'THREE_SECTION_GRID',
+                'title': content['title'],
+                'elements': [
+                    {
+                        'shape': 'ROUNDED_RECTANGLE',
+                        'text': '1️⃣ Assessment\n\n• ' + '\n• '.join(content['assessment']),
+                        'style': {'alignment': 'START', 'accent_color': '#fbbc05'}
+                    },
+                    {
+                        'shape': 'ROUNDED_RECTANGLE',
+                        'text': '2️⃣ Deployment\n\n• ' + '\n• '.join(content['deployment']),
+                        'style': {'alignment': 'START', 'accent_color': '#4285f4'}
+                    },
+                    {
+                        'shape': 'ROUNDED_RECTANGLE',
+                        'text': '3️⃣ Optimization\n\n• ' + '\n• '.join(content['optimization']),
+                        'style': {'alignment': 'START', 'accent_color': '#34a853'}
+                    }
+                ]
+            }
+            
+        elif slide_type == "ROI_METRICS":
+            return {
+                'layout': 'METRICS_DASHBOARD',
+                'title': content['title'],
+                'elements': [
+                    {
+                        'shape': 'CIRCLE',
+                        'text': f"📈 {metric['label']}\n\n{metric['value']}\n{metric['description']}",
+                        'style': {'alignment': 'CENTER', 'accent_color': '#4285f4'}
+                    }
+                    for i, metric in enumerate(content['metrics'])
+                ]
+            }
+            
+        elif slide_type == "CONCLUSION":
+            return {
+                'layout': 'CALL_TO_ACTION',
+                'title': content['title'],
+                'elements': [
+                    {
+                        'shape': 'ACTION_CARD',
+                        'text': '🚀 Key Takeaways\n\n• ' + '\n• '.join(content['takeaways']),
+                        'style': {'alignment': 'START', 'accent_color': '#4285f4'}
+                    },
+                    {
+                        'shape': 'ACTION_CARD',
+                        'text': '📅 Next Steps\n\n• ' + '\n• '.join(content['next_steps']),
+                        'style': {'alignment': 'START', 'accent_color': '#34a853'}
+                    }
+                ]
+            }
+            
+    except Exception as e:
+        print(f"Error generating content with GPT: {str(e)}")
+        return None
+
+def generate_slides_content(title, topic, num_slides):
+    """Generate a complete, professional slide deck with GPT-3.5 Turbo."""
+    slides = []
     
-    if slide_type == "LANDSCAPE" and is_ai_related:
-        return {
-            'layout': 'TWO_COLUMNS_WITH_HEADER',
-            'title': 'AI Technology Landscape',
-            'elements': [
-                {
-                    'shape': 'RECTANGLE',
-                    'text': '🔄 Current State\n\n• Rapid advancement in NLP & Computer Vision\n• Growing adoption of AutoML platforms\n• Rise of AI-first enterprises',
-                    'style': {'alignment': 'START', 'accent_color': '#34a853'}
-                },
-                {
-                    'shape': 'RECTANGLE',
-                    'text': '🎯 Market Dynamics\n\n• $62B AI software market\n• 35% YoY enterprise adoption\n• Key players: Google, AWS, Azure',
-                    'style': {'alignment': 'START', 'accent_color': '#ea4335'}
-                }
-            ]
-        }
+    # Core slide types in presentation order
+    core_slides = [
+        "TITLE",
+        "AGENDA",
+        "LANDSCAPE",
+        "IMPLEMENTATION",
+        "ROI_METRICS",
+        "CONCLUSION"
+    ]
     
-    if slide_type == "IMPLEMENTATION" and is_business:
-        return {
-            'layout': 'THREE_SECTION_GRID',
-            'title': 'Strategic Implementation',
-            'elements': [
-                {
-                    'shape': 'ROUNDED_RECTANGLE',
-                    'text': '1️⃣ Assessment\n\n• Data readiness audit\n• Infrastructure evaluation\n• Team capability analysis',
-                    'style': {'alignment': 'START', 'accent_color': '#fbbc05'}
-                },
-                {
-                    'shape': 'ROUNDED_RECTANGLE',
-                    'text': '2️⃣ Deployment\n\n• Phased rollout plan\n• Integration strategy\n• Change management',
-                    'style': {'alignment': 'START', 'accent_color': '#4285f4'}
-                },
-                {
-                    'shape': 'ROUNDED_RECTANGLE',
-                    'text': '3️⃣ Optimization\n\n• Performance metrics\n• Feedback loops\n• Continuous learning',
-                    'style': {'alignment': 'START', 'accent_color': '#34a853'}
-                }
-            ]
-        }
+    # Generate all slides using GPT-3.5 Turbo
+    for slide_type in core_slides[:num_slides]:
+        content = generate_slide_content_with_gpt(topic, slide_type)
+        if content:
+            slides.append(content)
     
-    if slide_type == "ROI_METRICS":
-        return {
-            'layout': 'METRICS_DASHBOARD',
-            'title': 'Success Metrics & ROI',
-            'elements': [
-                {
-                    'shape': 'CIRCLE',
-                    'text': '📈 Performance\n\n40%\nProductivity Gain',
-                    'style': {'alignment': 'CENTER', 'accent_color': '#4285f4'}
-                },
-                {
-                    'shape': 'CIRCLE',
-                    'text': '💰 Cost Savings\n\n30%\nOperational Costs',
-                    'style': {'alignment': 'CENTER', 'accent_color': '#34a853'}
-                },
-                {
-                    'shape': 'CIRCLE',
-                    'text': '🎯 Accuracy\n\n95%\nDecision Accuracy',
-                    'style': {'alignment': 'CENTER', 'accent_color': '#ea4335'}
-                }
-            ]
-        }
-    
-    if slide_type == "CONCLUSION":
-        return {
-            'layout': 'CALL_TO_ACTION',
-            'title': 'Next Steps',
-            'elements': [
-                {
-                    'shape': 'ACTION_CARD',
-                    'text': '🚀 Key Takeaways\n\n• AI drives 40% efficiency gains\n• Phased implementation reduces risk\n• ROI visible within 6 months',
-                    'style': {'alignment': 'START', 'accent_color': '#4285f4'}
-                },
-                {
-                    'shape': 'ACTION_CARD',
-                    'text': '📅 Action Items\n\n1. Schedule readiness assessment\n2. Define success metrics\n3. Build implementation roadmap',
-                    'style': {'alignment': 'START', 'accent_color': '#34a853'}
-                }
-            ]
-        }
-    
-    return None
+    return slides
 
 def create_layout_request(layout_type, slide_id, elements):
     """Create sophisticated layout requests with proper visual hierarchy."""
@@ -286,7 +333,7 @@ def create_layout_request(layout_type, slide_id, elements):
                     'pageObjectId': slide_id,
                     'size': {
                         'width': {'magnitude': page_width, 'unit': 'EMU'},
-                        'height': {'magnitude': page_height // 2, 'unit': 'EMU'}
+                        'height': {'magnitude': page_height, 'unit': 'EMU'}
                     },
                     'transform': {
                         'scaleX': 1,
@@ -298,72 +345,15 @@ def create_layout_request(layout_type, slide_id, elements):
                 }
             }
         })
-        # Style the background
-        requests.append({
-            'updateShapeProperties': {
-                'objectId': background_id,
-                'shapeProperties': {
-                    'shapeBackgroundFill': {
-                        'solidFill': {
-                            'color': {
-                                'rgbColor': {
-                                    'red': 0.259,
-                                    'green': 0.522,
-                                    'blue': 0.957
-                                }
-                            }
-                        }
-                    }
-                },
-                'fields': 'shapeBackgroundFill'
-            }
-        })
         
-    elif layout_type == "TWO_COLUMNS_WITH_HEADER":
-        # Calculate column dimensions
-        col_width = (page_width - (margin * 3)) // 2
-        col_height = page_height - (margin * 4)
-        
-        for i, element in enumerate(elements):
-            shape_id = f"{slide_id}_col_{i}"
-            # Create column container
-            requests.append({
-                'createShape': {
-                    'objectId': shape_id,
-                    'shapeType': element['shape'],
-                    'elementProperties': {
-                        'pageObjectId': slide_id,
-                        'size': {
-                            'width': {'magnitude': col_width, 'unit': 'EMU'},
-                            'height': {'magnitude': col_height, 'unit': 'EMU'}
-                        },
-                        'transform': {
-                            'scaleX': 1,
-                            'scaleY': 1,
-                            'translateX': margin + (i * (col_width + margin)),
-                            'translateY': margin * 2,
-                            'unit': 'EMU'
-                        }
-                    }
-                }
-            })
-            # Style the shape
-            requests.extend(create_shape_style_requests(shape_id, element['style']))
-            # Add text
-            requests.append({
-                'insertText': {
-                    'objectId': shape_id,
-                    'text': element['text']
-                }
-            })
-    
     elif layout_type == "METRICS_DASHBOARD":
-        # Create metric circles in a row
-        circle_size = 2000000  # Fixed size for circles
-        spacing = (page_width - (circle_size * 3)) // 4
+        # Create a grid layout for metrics
+        circle_size = 2000000  # Size in EMU
+        spacing = (page_width - (len(elements) * circle_size)) // (len(elements) + 1)
         
         for i, element in enumerate(elements):
-            circle_id = f"{slide_id}_metric_{i}"
+            circle_id = f"{slide_id}_col_{i}"
+            # Create shape first
             requests.append({
                 'createShape': {
                     'objectId': circle_id,
@@ -384,14 +374,19 @@ def create_layout_request(layout_type, slide_id, elements):
                     }
                 }
             })
-            # Style and add text
-            requests.extend(create_shape_style_requests(circle_id, element['style']))
-            requests.append({
-                'insertText': {
-                    'objectId': circle_id,
-                    'text': element['text']
-                }
-            })
+            
+            # First add text content
+            if element.get('text'):
+                requests.append({
+                    'insertText': {
+                        'objectId': circle_id,
+                        'text': element['text']
+                    }
+                })
+                
+            # Then apply styles
+            if element.get('style'):
+                requests.extend(create_shape_style_requests(circle_id, element['style']))
     
     return requests
 
@@ -429,9 +424,10 @@ def create_shape_style_requests(shape_id, style):
                         'rgbColor': hex_to_rgb(style.get('text_color', '#000000'))
                     }
                 },
-                'bold': style.get('bold', False)
+                'bold': style.get('bold', False),
+                'italic': style.get('italic', False)
             },
-            'fields': 'fontSize,foregroundColor,bold'
+            'fields': 'fontSize,foregroundColor,bold,italic'
         }
     })
     
@@ -442,28 +438,6 @@ def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
     rgb = tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
     return {'red': rgb[0], 'green': rgb[1], 'blue': rgb[2]}
-
-def generate_slides_content(title, topic, num_slides):
-    """Generate a complete, professional slide deck with proper flow."""
-    slides = []
-    
-    # Always include these core slides
-    core_slides = [
-        "TITLE",
-        "AGENDA",
-        "LANDSCAPE",
-        "IMPLEMENTATION",
-        "ROI_METRICS",
-        "CONCLUSION"
-    ]
-    
-    # Generate all core slides
-    for slide_type in core_slides:
-        content = generate_slide_content(topic, slide_type)
-        if content:
-            slides.append(content)
-    
-    return slides
 
 def create_slide(service, presentation_id, slide_content, index):
     """Create a slide with enhanced layout and formatting."""
@@ -486,24 +460,25 @@ def create_slide(service, presentation_id, slide_content, index):
     requests.append({
         'createShape': {
             'objectId': title_id,
-            'shapeType': 'TEXT_BOX',
+            'shapeType': 'RECTANGLE',
             'elementProperties': {
                 'pageObjectId': slide_id,
                 'size': {
                     'width': {'magnitude': 7000000, 'unit': 'EMU'},
-                    'height': {'magnitude': 800000, 'unit': 'EMU'}
+                    'height': {'magnitude': 1000000, 'unit': 'EMU'}
                 },
                 'transform': {
                     'scaleX': 1,
                     'scaleY': 1,
-                    'translateX': 1000000,
-                    'translateY': 400000,
+                    'translateX': 1072000,
+                    'translateY': 500000,
                     'unit': 'EMU'
                 }
             }
         }
     })
     
+    # First insert text
     requests.append({
         'insertText': {
             'objectId': title_id,
@@ -511,20 +486,21 @@ def create_slide(service, presentation_id, slide_content, index):
         }
     })
     
-    # Style title
+    # Then add content based on layout type
+    if 'layout' in slide_content:
+        layout_requests = create_layout_request(
+            slide_content['layout'],
+            slide_id,
+            slide_content.get('elements', [])
+        )
+        requests.extend(layout_requests)
+    
+    # Finally apply all text styles
     requests.extend(create_text_style_requests(title_id, {
         'fontSize': {'magnitude': 24, 'unit': 'PT'},
         'bold': True,
         'alignment': 'CENTER'
     }))
-    
-    # Add content based on layout type
-    if 'layout' in slide_content:
-        requests.extend(create_layout_request(
-            slide_content['layout'],
-            slide_id,
-            slide_content.get('elements', [])
-        ))
     
     return requests
 
