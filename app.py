@@ -25,8 +25,8 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
 # Set OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Initialize OpenAI client for legacy compatibility
-client = openai
+# Initialize OpenAI client
+client = openai.ChatCompletion  # Use ChatCompletion directly
 
 # Database configuration
 if os.environ.get('DATABASE_URL'):
@@ -165,7 +165,7 @@ def index():
 def generate_slide_content_with_gpt(topic, slide_type):
     try:
         # Use legacy OpenAI API
-        response = client.ChatCompletion.create(
+        response = client.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a professional presentation content creator."},
@@ -181,7 +181,7 @@ def generate_slides_content(title, topic, num_slides):
     """Generate a complete, professional slide deck with GPT-3.5 Turbo."""
     try:
         # Use legacy OpenAI API
-        response = client.ChatCompletion.create(
+        response = client.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a professional presentation content creator."},
