@@ -345,11 +345,6 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
                     "date": "Optional date"
                 },
                 {
-                    "type": "AGENDA",
-                    "title": "Agenda",
-                    "points": ["Section 1", "Section 2", "Section 3"]
-                },
-                {
                     "type": "SECTION",
                     "title": "Clear section title",
                     "points": ["Key point 1", "Supporting detail", "Key conclusion"],
@@ -372,13 +367,12 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
         Requirements:
         1. Return ONLY the JSON object, no other text
         2. Title slide must include a compelling title and relevant subtitle
-        3. Agenda must outline 4-6 key sections
-        4. Section slides must have clear titles and 3-5 concise bullet points
-        5. Include visual guidance for charts, images, or diagrams where relevant
-        6. End with summary and closing slides
-        7. Use professional business language
-        8. Ensure logical flow between sections
-        9. Minimum 8 slides, maximum 12 slides"""
+        3. Section slides must have clear titles and 3-5 concise bullet points
+        4. Include visual guidance for charts, images, or diagrams where relevant
+        5. End with summary and closing slides
+        6. Use professional business language
+        7. Ensure logical flow between sections
+        8. Minimum 8 slides, maximum 12 slides"""
 
         user_prompt = f"""Create a professional presentation about '{title}' with at least {max(8, num_slides)} slides.
         Topic details: {topic if topic else 'Focus on key aspects and trends'}"""

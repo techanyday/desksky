@@ -126,10 +126,12 @@ class SlidesGenerator:
                 slide_type = slide['type']
                 points = slide['main_points']
                 
+                # Skip agenda slides
+                if slide_type == 'AGENDA':
+                    continue
+                    
                 if slide_type == 'TITLE':
                     requests.append(self._create_title_slide(points[0], points[1] if len(points) > 1 else None))
-                elif slide_type == 'AGENDA':
-                    requests.append(self._create_agenda_slide(points))
                 else:
                     requests.append(self._create_content_slide(points[0], points[1:]))
             
@@ -196,30 +198,11 @@ class SlidesGenerator:
 
     def transform_slide_to_requests(self, slide):
         """Transform slide content into Google Slides API requests"""
-        # Map slide types to Google Slides layouts
-        layout_mapping = {
-            'TITLE': 'TITLE',
-            'AGENDA': 'SECTION_HEADER',
-            'SECTION': 'TITLE_AND_BODY',
-            'SUMMARY': 'TITLE_AND_BODY',
-            'CLOSING': 'SECTION_HEADER'
-        }
-
         try:
+            requests = []
             slide_type = slide.get('type', '').upper()
-            layout = layout_mapping.get(slide_type, 'TITLE_AND_BODY')
             
-            # Create slide with appropriate layout
-            requests = [{
-                'createSlide': {
-                    'slideLayoutReference': {
-                        'predefinedLayout': layout
-                    },
-                    'placeholderIdMappings': []
-                }
-            }]
-
-            # Add content based on slide type
+            # Process based on slide type
             if slide_type == 'TITLE':
                 requests.extend([
                     {
@@ -247,23 +230,6 @@ class SlidesGenerator:
                         'insertText': {
                             'objectId': '{{FOOTER}}',
                             'text': f"Date: {slide.get('date')}"
-                        }
-                    })
-            elif slide_type == 'AGENDA':
-                requests.extend([
-                    {
-                        'insertText': {
-                            'objectId': '{{TITLE}}',
-                            'text': slide.get('title', 'Agenda')
-                        }
-                    }
-                ])
-                if slide.get('points'):
-                    bullet_points = '\n• ' + '\n• '.join(slide.get('points'))
-                    requests.append({
-                        'insertText': {
-                            'objectId': '{{BODY}}',
-                            'text': bullet_points.strip()
                         }
                     })
             elif slide_type in ['SECTION', 'BODY', 'CONTENT']:
