@@ -158,75 +158,119 @@ class SlidesGenerator:
         }
 
     def create_presentation(self, title, num_slides):
-        """Create a Google Slides presentation"""
+        """Create a new presentation."""
         try:
-            # Create presentation
+            # Create a new presentation
             presentation = self.service.presentations().create(
                 body={'title': title}
             ).execute()
-            presentation_id = presentation['presentationId']
             
-            # Get the ID of the default first slide
-            default_slide_id = presentation.get('slides', [{}])[0].get('objectId')
-            
-            # Generate content
-            content = self.generate_content(title, num_slides)
-            if not content:
+            presentation_id = presentation.get('presentationId')
+            if not presentation_id:
+                raise ValueError("Failed to get presentation ID")
+
+            # Generate slide content
+            slide_content = self.generate_content(title, num_slides)
+            if not slide_content:
                 raise ValueError("Failed to generate slide content")
-            
-            # Create slides
-            requests = []
-            
-            # Delete the default first slide if it exists
-            if default_slide_id:
-                requests.append({
-                    'deleteObject': {
-                        'objectId': default_slide_id
-                    }
-                })
-            
-            # Add each slide
-            for slide in content:
-                slide_type = slide['type']
-                points = slide['main_points']
-                
-                # Skip agenda slides
-                if slide_type == 'AGENDA':
-                    continue
-                    
-                # Create slide with layout
-                slide_id = f"slide_{len(requests)}"
-                if slide_type == 'TITLE':
-                    slide_requests = self._create_title_slide(
-                        points[0], 
-                        points[1] if len(points) > 1 else None,
-                        slide_id
-                    )
-                else:
-                    slide_requests = self._create_content_slide(
-                        points[0], 
-                        points[1:],
-                        slide_id
-                    )
-                
-                # Apply theme to slide
-                theme_requests = self._apply_theme_to_slide(slide_id)
-                
-                requests.extend(slide_requests)
-                requests.extend(theme_requests)
-            
+
+            # Transform all slides to requests
+            all_requests = []
+            for slide in slide_content:
+                slide_requests = self.transform_slide_to_requests(slide)
+                all_requests.extend(slide_requests)
+
             # Execute the requests
-            if requests:
+            if all_requests:
                 self.service.presentations().batchUpdate(
                     presentationId=presentation_id,
-                    body={'requests': requests}
+                    body={'requests': all_requests}
                 ).execute()
-            
+
             return presentation_id
-            
+
         except Exception as e:
             logger.error(f"Error creating presentation: {str(e)}")
-            return None
+            raise ValueError("Failed to create presentation") from e
+
+    def transform_slide_to_requests(self, slide):
+        """Transform a slide into Google Slides API requests."""
+        requests = []
+        
+        # Create a new slide
+        requests.append({
+            'createSlide': {
+                'objectId': slide['id'],
+                'slideLayoutReference': {
+                    'predefinedLayout': 'TITLE_AND_BODY'
+                }
+            }
+        })
+        
+        # Update slide background
+        requests.append({
+            'updatePageProperties': {
+                'objectId': slide['id'],
+                'pageProperties': {
+                    'pageBackgroundFill': self._create_color_style(self.theme['rgb_colors']['background'])
+                },
+                'fields': 'pageBackgroundFill'
+            }
+        })
+
+        # Update title
+        title_id = f"{slide['id']}_title"
+        requests.append({
+            'insertText': {
+                'objectId': title_id,
+                'text': slide['title']
+            }
+        })
+        
+        # Update title style
+        requests.append({
+            'updateTextStyle': {
+                'objectId': title_id,
+                'style': {
+                    'foregroundColor': self.theme['rgb_colors']['title_text'],
+                    'fontSize': {
+                        'magnitude': 24,
+                        'unit': 'PT'
+                    },
+                    'bold': True
+                },
+                'fields': 'foregroundColor,fontSize,bold'
+            }
+        })
+
+        # Update body
+        body_id = f"{slide['id']}_body"
+        bullet_points = [f"• {point}" for point in slide['content']]
+        body_text = "\n".join(bullet_points)
+        
+        requests.append({
+            'insertText': {
+                'objectId': body_id,
+                'text': body_text
+            }
+        })
+        
+        # Update body text style
+        requests.append({
+            'updateTextStyle': {
+                'objectId': body_id,
+                'style': {
+                    'foregroundColor': self.theme['rgb_colors']['body_text'],
+                    'fontSize': {
+                        'magnitude': 18,
+                        'unit': 'PT'
+                    }
+                },
+                'fields': 'foregroundColor,fontSize'
+            }
+        })
+
+        return requests
 
     def _create_title_slide(self, title, subtitle=None, slide_id=None):
         """Create a title slide"""
@@ -313,94 +357,4 @@ class SlidesGenerator:
                 }
             })
         
-        return requests
-
-    def transform_slide_to_requests(self, slide):
-        """Transform a slide into Google Slides API requests."""
-        requests = []
-        
-        # Create a new slide
-        requests.append({
-            'createSlide': {
-                'objectId': slide['id'],
-                'slideLayoutReference': {
-                    'predefinedLayout': 'TITLE_AND_BODY'
-                }
-            }
-        })
-        
-        # Update slide background
-        requests.append({
-            'updatePageProperties': {
-                'objectId': slide['id'],
-                'pageProperties': {
-                    'pageBackgroundFill': self._create_color_style(self.theme['rgb_colors']['background'])
-                },
-                'fields': 'pageBackgroundFill'
-            }
-        })
-
-        # Update title
-        title_id = f"{slide['id']}_title"
-        requests.append({
-            'insertText': {
-                'objectId': title_id,
-                'text': slide['title']
-            }
-        })
-        
-        # Update title style
-        requests.append({
-            'updateTextStyle': {
-                'objectId': title_id,
-                'style': {
-                    'foregroundColor': self.theme['rgb_colors']['title_text'],
-                    'fontSize': {
-                        'magnitude': 24,
-                        'unit': 'PT'
-                    },
-                    'bold': True
-                },
-                'fields': 'foregroundColor,fontSize,bold'
-            }
-        })
-
-        # Update body
-        body_id = f"{slide['id']}_body"
-        bullet_points = [f"• {point}" for point in slide['content']]
-        body_text = "\n".join(bullet_points)
-        
-        requests.append({
-            'insertText': {
-                'objectId': body_id,
-                'text': body_text
-            }
-        })
-        
-        # Update body text style
-        requests.append({
-            'updateTextStyle': {
-                'objectId': body_id,
-                'style': {
-                    'foregroundColor': self.theme['rgb_colors']['body_text'],
-                    'fontSize': {
-                        'magnitude': 18,
-                        'unit': 'PT'
-                    }
-                },
-                'fields': 'foregroundColor,fontSize'
-            }
-        })
-
-        # Update shape properties for body placeholder
-        requests.append({
-            'updateShapeProperties': {
-                'objectId': body_id,
-                'shapeProperties': {
-                    'shapeBackgroundFill': self._create_color_style(self.theme['rgb_colors']['background'])
-                },
-                'fields': 'shapeBackgroundFill'
-            }
-        })
-
         return requests

@@ -331,55 +331,23 @@ def transform_slide_content(slide):
         }
 
 def generate_slide_content_with_gpt(title, topic, num_slides):
-    """Generate professional slide content using GPT-3.5"""
+    """Generate slide content using GPT-3.5."""
     try:
-        system_prompt = """You are a professional presentation designer. Create high-quality, visually engaging slides with clear structure and professional formatting.
-        Return ONLY a JSON object with a structured 'slides' array. Do not include any other text before or after the JSON.
-        Each slide must follow this exact format:
+        # Create system prompt
+        system_prompt = """You are a presentation content generator. Create professional presentation content based on the given title and topic.
+        Format the response as a list of JSON objects, one for each slide. Each slide should have:
+        - "title": A clear, concise title
+        - "content": A list of bullet points (3-5 points per slide)
+        
+        The first slide should be a title slide, and the last slide should be a summary/conclusion slide.
+        Keep bullet points concise and impactful.
+        Avoid using special characters or apostrophes that might cause JSON parsing issues."""
 
-        {
-            "slides": [
-                {
-                    "type": "TITLE",
-                    "title": "Main presentation title",
-                    "subtitle": "Optional subtitle or context",
-                    "presenter": "Optional presenter name",
-                    "date": "Optional date"
-                },
-                {
-                    "type": "SECTION",
-                    "title": "Clear section title",
-                    "points": ["Key point 1", "Supporting detail", "Key conclusion"],
-                    "visual_guidance": "Insert chart showing quarterly growth trends"
-                },
-                {
-                    "type": "SUMMARY",
-                    "title": "Key Takeaways",
-                    "points": ["Main takeaway 1", "Main takeaway 2"]
-                },
-                {
-                    "type": "CLOSING",
-                    "title": "Thank You",
-                    "subtitle": "Questions & Discussion",
-                    "contact": "Optional contact information"
-                }
-            ]
-        }
+        # Create user prompt
+        user_prompt = f"Create a {num_slides}-slide presentation about '{title}'. Topic focus: {topic}"
 
-        Requirements:
-        1. Return ONLY the JSON object, no other text
-        2. Title slide must include a compelling title and relevant subtitle
-        3. Section slides must have clear titles and 3-5 concise bullet points
-        4. Include visual guidance for charts, images, or diagrams where relevant
-        5. End with summary and closing slides
-        6. Use professional business language
-        7. Ensure logical flow between sections
-        8. Minimum 8 slides, maximum 12 slides"""
-
-        user_prompt = f"""Create a professional presentation about '{title}' with at least {max(8, num_slides)} slides.
-        Topic details: {topic if topic else 'Focus on key aspects and trends'}"""
-
-        response = openai.ChatCompletion.create(
+        # Get completion from OpenAI
+        completion = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -387,137 +355,30 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
             ],
             temperature=0.7
         )
-        
-        if not response or not response.choices:
-            app.logger.error("Empty response from OpenAI")
-            return None
-            
-        # Get the content and find the JSON object
-        content = response.choices[0].message['content'].strip()
-        if not content:
-            app.logger.error("Empty content from GPT")
-            return None
 
-        # Find the actual JSON content
-        try:
-            # Try to find JSON by looking for opening and closing braces
-            json_start = content.find('{')
-            json_end = content.rfind('}')
-            
-            if json_start >= 0 and json_end > json_start:
-                content = content[json_start:json_end + 1]
-                
-                # Remove any non-JSON lines
-                lines = []
-                brace_count = 0
-                for line in content.splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                        
-                    # Skip log lines and non-JSON content
-                    if line.startswith(('info', 'error', '#', '//', '/*')):
-                        continue
-                        
-                    # Count braces to ensure we keep JSON structure
-                    brace_count += line.count('{') - line.count('}')
-                    if brace_count < 0:
-                        continue
-                        
-                    lines.append(line)
-                    
-                content = '\n'.join(lines)
-                
-                # Clean special characters
-                content = (content
-                    .replace('"', '"')
-                    .replace('"', '"')
-                    .replace(''', "'")
-                    .replace(''', "'")
-                    .replace('…', '...')
-                    .replace('–', '-')
-                    .replace('—', '-')
-                )
-                
-                # Remove code blocks if present
-                content = re.sub(r'```json\s*|\s*```', '', content)
-                
-                # Remove any non-ASCII characters
-                content = ''.join(char for char in content if ord(char) < 128)
-                
-                # Parse the JSON
-                data = json.loads(content)
-                
-                # Extract slides array
-                if isinstance(data, dict) and 'slides' in data:
-                    slides = data['slides']
-                elif isinstance(data, list):
-                    slides = data
-                else:
-                    app.logger.error("Invalid response format")
-                    return None
-                
-                # Process slides
-                processed_slides = []
-                for slide in slides:
-                    if not isinstance(slide, dict):
-                        continue
-                        
-                    slide_type = slide.get('type', '').upper()
-                    
-                    # Process based on slide type
-                    if slide_type == 'TITLE':
-                        processed_slides.append({
-                            'type': slide_type,
-                            'title': slide.get('title', ''),
-                            'subtitle': slide.get('subtitle', ''),
-                            'presenter': slide.get('presenter', ''),
-                            'date': slide.get('date', '')
-                        })
-                    elif slide_type == 'AGENDA':
-                        processed_slides.append({
-                            'type': slide_type,
-                            'title': slide.get('title', 'Agenda'),
-                            'points': slide.get('points', [])
-                        })
-                    elif slide_type in ['SECTION', 'BODY', 'CONTENT']:
-                        processed_slides.append({
-                            'type': 'SECTION',
-                            'title': slide.get('title', ''),
-                            'points': slide.get('points', []),
-                            'visual_guidance': slide.get('visual_guidance', '')
-                        })
-                    elif slide_type == 'SUMMARY':
-                        processed_slides.append({
-                            'type': slide_type,
-                            'title': slide.get('title', 'Key Takeaways'),
-                            'points': slide.get('points', [])
-                        })
-                    elif slide_type == 'CLOSING':
-                        processed_slides.append({
-                            'type': slide_type,
-                            'title': slide.get('title', 'Thank You'),
-                            'subtitle': slide.get('subtitle', ''),
-                            'contact': slide.get('contact', '')
-                        })
-                
-                if not processed_slides:
-                    app.logger.error("No valid slides after processing")
-                    return None
-                    
-                return processed_slides
-            else:
-                app.logger.error("No valid JSON found in response")
-                return None
-                
-        except json.JSONDecodeError as e:
-            app.logger.error(f"JSON parsing error: {str(e)}")
-            app.logger.error(f"Content that failed to parse: {content}")
-            return None
-            
+        # Parse and validate the response
+        content = completion.choices[0].message.content
+        slides = json.loads(content)
+
+        # Process slides
+        processed_slides = []
+        for i, slide in enumerate(slides):
+            processed_slide = {
+                'id': f'slide_{i+1}',
+                'title': slide.get('title', '').strip(),
+                'content': [point.strip() for point in slide.get('content', [])]
+            }
+            processed_slides.append(processed_slide)
+
+        return processed_slides
+
+    except json.JSONDecodeError as e:
+        app.logger.error(f"JSON parsing error: {str(e)}")
+        app.logger.error(f"Problematic response: {content}")
+        raise ValueError("Failed to generate slide content")
     except Exception as e:
         app.logger.error(f"Error generating slide content: {str(e)}")
-        return None
+        raise ValueError("Failed to generate slide content")
 
 @app.route('/api/themes', methods=['GET'])
 def get_themes():
