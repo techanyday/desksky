@@ -182,3 +182,145 @@ class SlidesGenerator:
                 'placeholderIdMappings': []
             }
         }
+
+    def transform_slide_to_requests(self, slide):
+        """Transform slide content into Google Slides API requests"""
+        # Map slide types to Google Slides layouts
+        layout_mapping = {
+            'TITLE': 'TITLE',
+            'AGENDA': 'SECTION_HEADER',
+            'SECTION': 'TITLE_AND_BODY',
+            'SUMMARY': 'TITLE_AND_BODY',
+            'CLOSING': 'SECTION_HEADER'
+        }
+
+        try:
+            slide_type = slide.get('type', '').upper()
+            layout = layout_mapping.get(slide_type, 'TITLE_AND_BODY')
+            
+            # Create slide with appropriate layout
+            requests = [{
+                'createSlide': {
+                    'slideLayoutReference': {
+                        'predefinedLayout': layout
+                    },
+                    'placeholderIdMappings': []
+                }
+            }]
+
+            # Add content based on slide type
+            if slide_type == 'TITLE':
+                requests.extend([
+                    {
+                        'insertText': {
+                            'objectId': '{{TITLE}}',
+                            'text': slide.get('title', '')
+                        }
+                    },
+                    {
+                        'insertText': {
+                            'objectId': '{{SUBTITLE}}',
+                            'text': slide.get('subtitle', '')
+                        }
+                    }
+                ])
+                if slide.get('presenter'):
+                    requests.append({
+                        'insertText': {
+                            'objectId': '{{BODY}}',
+                            'text': f"Presenter: {slide.get('presenter')}"
+                        }
+                    })
+                if slide.get('date'):
+                    requests.append({
+                        'insertText': {
+                            'objectId': '{{FOOTER}}',
+                            'text': f"Date: {slide.get('date')}"
+                        }
+                    })
+            elif slide_type == 'AGENDA':
+                requests.extend([
+                    {
+                        'insertText': {
+                            'objectId': '{{TITLE}}',
+                            'text': slide.get('title', 'Agenda')
+                        }
+                    }
+                ])
+                if slide.get('points'):
+                    bullet_points = '\n• ' + '\n• '.join(slide.get('points'))
+                    requests.append({
+                        'insertText': {
+                            'objectId': '{{BODY}}',
+                            'text': bullet_points.strip()
+                        }
+                    })
+            elif slide_type in ['SECTION', 'BODY', 'CONTENT']:
+                requests.extend([
+                    {
+                        'insertText': {
+                            'objectId': '{{TITLE}}',
+                            'text': slide.get('title', '')
+                        }
+                    }
+                ])
+                if slide.get('points'):
+                    bullet_points = '\n• ' + '\n• '.join(slide.get('points'))
+                    requests.append({
+                        'insertText': {
+                            'objectId': '{{BODY}}',
+                            'text': bullet_points.strip()
+                        }
+                    })
+                if slide.get('visual_guidance'):
+                    requests.append({
+                        'insertText': {
+                            'objectId': '{{FOOTER}}',
+                            'text': f"Visual Guidance: {slide.get('visual_guidance')}"
+                        }
+                    })
+            elif slide_type == 'SUMMARY':
+                requests.extend([
+                    {
+                        'insertText': {
+                            'objectId': '{{TITLE}}',
+                            'text': slide.get('title', 'Key Takeaways')
+                        }
+                    }
+                ])
+                if slide.get('points'):
+                    bullet_points = '\n• ' + '\n• '.join(slide.get('points'))
+                    requests.append({
+                        'insertText': {
+                            'objectId': '{{BODY}}',
+                            'text': bullet_points.strip()
+                        }
+                    })
+            elif slide_type == 'CLOSING':
+                requests.extend([
+                    {
+                        'insertText': {
+                            'objectId': '{{TITLE}}',
+                            'text': slide.get('title', 'Thank You')
+                        }
+                    },
+                    {
+                        'insertText': {
+                            'objectId': '{{SUBTITLE}}',
+                            'text': slide.get('subtitle', '')
+                        }
+                    }
+                ])
+                if slide.get('contact'):
+                    requests.append({
+                        'insertText': {
+                            'objectId': '{{FOOTER}}',
+                            'text': f"Contact: {slide.get('contact')}"
+                        }
+                    })
+
+            return requests
+
+        except Exception as e:
+            print(f"Error transforming slide: {str(e)}")
+            return None

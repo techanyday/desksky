@@ -183,14 +183,13 @@ def transform_slide_content(slide):
     layout_mapping = {
         'TITLE': 'TITLE',
         'AGENDA': 'SECTION_HEADER',
-        'BODY': 'TITLE_AND_BODY',
-        'EXAMPLES': 'TITLE_AND_BODY',
-        'CONCLUSION': 'SECTION_HEADER',
-        'REFERENCES': 'TITLE_AND_BODY'
+        'SECTION': 'TITLE_AND_BODY',
+        'SUMMARY': 'TITLE_AND_BODY',
+        'CLOSING': 'SECTION_HEADER'
     }
     
     try:
-        slide_type = slide.get('type', 'BODY')
+        slide_type = slide.get('type', 'TITLE')
         layout = layout_mapping.get(slide_type, 'TITLE_AND_BODY')
         
         # Create the slide creation request
@@ -205,57 +204,107 @@ def transform_slide_content(slide):
         
         # Create text insertion requests based on main points
         text_requests = []
-        main_points = slide.get('main_points', [])
-        
-        if main_points:
-            if layout == 'TITLE':
-                # For title slides, use first point as title, second as subtitle if available
+        if slide_type == 'TITLE':
+            text_requests.append({
+                'insertText': {
+                    'objectId': '{{TITLE}}',
+                    'text': slide.get('title', '')
+                }
+            })
+            if slide.get('subtitle'):
                 text_requests.append({
                     'insertText': {
-                        'objectId': '{{TITLE}}',
-                        'text': main_points[0]
+                        'objectId': '{{SUBTITLE}}',
+                        'text': slide.get('subtitle', '')
                     }
                 })
-                if len(main_points) > 1:
-                    text_requests.append({
-                        'insertText': {
-                            'objectId': '{{SUBTITLE}}',
-                            'text': main_points[1]
-                        }
-                    })
-            elif layout == 'SECTION_HEADER':
-                # For section headers (agenda, conclusion), use first point as title
+            if slide.get('presenter'):
                 text_requests.append({
                     'insertText': {
-                        'objectId': '{{TITLE}}',
-                        'text': main_points[0]
+                        'objectId': '{{BODY}}',
+                        'text': f"Presenter: {slide.get('presenter', '')}"
                     }
                 })
-                if len(main_points) > 1:
-                    # Add remaining points as subtitle in a bulleted list
-                    bullet_points = '\n• ' + '\n• '.join(main_points[1:])
-                    text_requests.append({
-                        'insertText': {
-                            'objectId': '{{SUBTITLE}}',
-                            'text': bullet_points.strip()
-                        }
-                    })
-            else:
-                # For other slides, first point is title, rest are bullet points
+            if slide.get('date'):
                 text_requests.append({
                     'insertText': {
-                        'objectId': '{{TITLE}}',
-                        'text': main_points[0]
+                        'objectId': '{{FOOTER}}',
+                        'text': f"Date: {slide.get('date', '')}"
                     }
                 })
-                if len(main_points) > 1:
-                    bullet_points = '\n• ' + '\n• '.join(main_points[1:])
-                    text_requests.append({
-                        'insertText': {
-                            'objectId': '{{BODY}}',
-                            'text': bullet_points.strip()
-                        }
-                    })
+        elif slide_type == 'AGENDA':
+            text_requests.append({
+                'insertText': {
+                    'objectId': '{{TITLE}}',
+                    'text': slide.get('title', 'Agenda')
+                }
+            })
+            if slide.get('points'):
+                bullet_points = '\n• ' + '\n• '.join(slide.get('points', []))
+                text_requests.append({
+                    'insertText': {
+                        'objectId': '{{BODY}}',
+                        'text': bullet_points.strip()
+                    }
+                })
+        elif slide_type == 'SECTION':
+            text_requests.append({
+                'insertText': {
+                    'objectId': '{{TITLE}}',
+                    'text': slide.get('title', '')
+                }
+            })
+            if slide.get('points'):
+                bullet_points = '\n• ' + '\n• '.join(slide.get('points', []))
+                text_requests.append({
+                    'insertText': {
+                        'objectId': '{{BODY}}',
+                        'text': bullet_points.strip()
+                    }
+                })
+            if slide.get('visual_guidance'):
+                text_requests.append({
+                    'insertText': {
+                        'objectId': '{{FOOTER}}',
+                        'text': f"Visual Guidance: {slide.get('visual_guidance', '')}"
+                    }
+                })
+        elif slide_type == 'SUMMARY':
+            text_requests.append({
+                'insertText': {
+                    'objectId': '{{TITLE}}',
+                    'text': slide.get('title', 'Key Takeaways')
+                }
+            })
+            if slide.get('points'):
+                bullet_points = '\n• ' + '\n• '.join(slide.get('points', []))
+                text_requests.append({
+                    'insertText': {
+                        'objectId': '{{BODY}}',
+                        'text': bullet_points.strip()
+                    }
+                })
+        elif slide_type == 'CLOSING':
+            text_requests.append({
+                'insertText': {
+                    'objectId': '{{TITLE}}',
+                    'text': slide.get('title', 'Thank You')
+                }
+            })
+            if slide.get('subtitle'):
+                text_requests.append({
+                    'insertText': {
+                        'objectId': '{{SUBTITLE}}',
+                        'text': slide.get('subtitle', '')
+                    }
+                })
+            if slide.get('contact'):
+                text_requests.append({
+                    'insertText': {
+                        'objectId': '{{FOOTER}}',
+                        'text': f"Contact: {slide.get('contact', '')}"
+                    }
+                })
         
         return {
             'layout': layout,
@@ -280,32 +329,62 @@ def transform_slide_content(slide):
         }
 
 def generate_slide_content_with_gpt(title, topic, num_slides):
-    """Generate slide content using GPT-3"""
+    """Generate professional slide content using GPT-3"""
     try:
-        prompt = f"""Create a presentation about '{title}' with {num_slides} slides.
-        Return a JSON object with a 'slides' array. Each slide must have:
-        1. 'type': one of ['TITLE', 'AGENDA', 'BODY', 'EXAMPLES', 'CONCLUSION']
-        2. 'main_points': array of strings
+        prompt = f"""Create a professional presentation about '{title}' with at least {max(8, num_slides)} slides.
+        Return a JSON object with a structured 'slides' array. Each slide must follow this exact format:
 
-        First slide must be TITLE, second AGENDA, last CONCLUSION.
-        Format exactly like this, with no other text:
         {{
             "slides": [
                 {{
                     "type": "TITLE",
-                    "main_points": ["Title"]
+                    "title": "Main presentation title",
+                    "subtitle": "Optional subtitle or context",
+                    "presenter": "Optional presenter name",
+                    "date": "Optional date"
                 }},
                 {{
                     "type": "AGENDA",
-                    "main_points": ["Point 1", "Point 2"]
+                    "title": "Agenda",
+                    "points": ["Section 1", "Section 2", "Section 3"]
+                }},
+                {{
+                    "type": "SECTION",
+                    "title": "Clear section title",
+                    "points": ["Key point 1", "Supporting detail", "Key conclusion"],
+                    "visual_guidance": "Insert chart showing quarterly growth trends"
+                }},
+                {{
+                    "type": "SUMMARY",
+                    "title": "Key Takeaways",
+                    "points": ["Main takeaway 1", "Main takeaway 2"]
+                }},
+                {{
+                    "type": "CLOSING",
+                    "title": "Thank You",
+                    "subtitle": "Questions & Discussion",
+                    "contact": "Optional contact information"
                 }}
             ]
-        }}"""
+        }}
+
+        Requirements:
+        1. Title slide must include a compelling title and relevant subtitle
+        2. Agenda must outline 4-6 key sections
+        3. Section slides must have clear titles and 3-5 concise bullet points
+        4. Include visual guidance for charts, images, or diagrams where relevant
+        5. End with summary and closing slides
+        6. Use professional business language
+        7. Ensure logical flow between sections
+        8. Minimum 8 slides, maximum 12 slides
+
+        Create a complete presentation about: {title}
+        Topic details: {topic if topic else 'Focus on key aspects and trends'}"""
 
         response = openai.Completion.create(
             model="gpt-3.5-turbo-instruct",
             prompt=prompt,
-            max_tokens=1000,
+            max_tokens=2000,
             temperature=0.7
         )
         
@@ -363,24 +442,42 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
                 if not isinstance(slide, dict):
                     continue
                     
-                slide_type = slide.get('type')
-                points = slide.get('main_points', [])
+                slide_type = slide.get('type', '').upper()
                 
-                if not slide_type or not points or not isinstance(points, list):
-                    continue
-                
-                # Clean points
-                cleaned_points = []
-                for point in points:
-                    if point and isinstance(point, str):
-                        cleaned_point = point.strip()
-                        if cleaned_point:
-                            cleaned_points.append(cleaned_point)
-                
-                if cleaned_points:
+                # Process based on slide type
+                if slide_type == 'TITLE':
                     processed_slides.append({
                         'type': slide_type,
-                        'main_points': cleaned_points
+                        'title': slide.get('title', ''),
+                        'subtitle': slide.get('subtitle', ''),
+                        'presenter': slide.get('presenter', ''),
+                        'date': slide.get('date', '')
+                    })
+                elif slide_type == 'AGENDA':
+                    processed_slides.append({
+                        'type': slide_type,
+                        'title': slide.get('title', 'Agenda'),
+                        'points': slide.get('points', [])
+                    })
+                elif slide_type in ['SECTION', 'BODY', 'CONTENT']:
+                    processed_slides.append({
+                        'type': 'SECTION',
+                        'title': slide.get('title', ''),
+                        'points': slide.get('points', []),
+                        'visual_guidance': slide.get('visual_guidance', '')
+                    })
+                elif slide_type == 'SUMMARY':
+                    processed_slides.append({
+                        'type': slide_type,
+                        'title': slide.get('title', 'Key Takeaways'),
+                        'points': slide.get('points', [])
+                    })
+                elif slide_type == 'CLOSING':
+                    processed_slides.append({
+                        'type': slide_type,
+                        'title': slide.get('title', 'Thank You'),
+                        'subtitle': slide.get('subtitle', ''),
+                        'contact': slide.get('contact', '')
                     })
             
             if not processed_slides:
