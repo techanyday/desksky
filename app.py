@@ -402,98 +402,116 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
 
         # Find the actual JSON content
         try:
-            # Try to find JSON by looking for opening brace
+            # Try to find JSON by looking for opening and closing braces
             json_start = content.find('{')
-            if json_start >= 0:
-                content = content[json_start:]
+            json_end = content.rfind('}')
             
-            # Clean special characters
-            content = (content
-                .replace('"', '"')
-                .replace('"', '"')
-                .replace(''', "'")
-                .replace(''', "'")
-                .replace('…', '...')
-                .replace('–', '-')
-                .replace('—', '-')
-            )
-            
-            # Remove code blocks if present
-            content = re.sub(r'```json\s*|\s*```', '', content)
-            
-            # Remove any non-ASCII characters
-            content = ''.join(char for char in content if ord(char) < 128)
-            
-            # Remove log lines and clean up JSON
-            lines = []
-            for line in content.splitlines():
-                line = line.strip()
-                if line and not line.startswith('info') and not line.startswith('error'):
+            if json_start >= 0 and json_end > json_start:
+                content = content[json_start:json_end + 1]
+                
+                # Remove any non-JSON lines
+                lines = []
+                brace_count = 0
+                for line in content.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                        
+                    # Skip log lines and non-JSON content
+                    if line.startswith(('info', 'error', '#', '//', '/*')):
+                        continue
+                        
+                    # Count braces to ensure we keep JSON structure
+                    brace_count += line.count('{') - line.count('}')
+                    if brace_count < 0:
+                        continue
+                        
                     lines.append(line)
-            content = '\n'.join(lines)
-            
-            # Parse the JSON
-            data = json.loads(content)
-            
-            # Extract slides array
-            if isinstance(data, dict) and 'slides' in data:
-                slides = data['slides']
-            elif isinstance(data, list):
-                slides = data
-            else:
-                app.logger.error("Invalid response format")
-                return None
-            
-            # Process slides
-            processed_slides = []
-            for slide in slides:
-                if not isinstance(slide, dict):
-                    continue
                     
-                slide_type = slide.get('type', '').upper()
+                content = '\n'.join(lines)
                 
-                # Process based on slide type
-                if slide_type == 'TITLE':
-                    processed_slides.append({
-                        'type': slide_type,
-                        'title': slide.get('title', ''),
-                        'subtitle': slide.get('subtitle', ''),
-                        'presenter': slide.get('presenter', ''),
-                        'date': slide.get('date', '')
-                    })
-                elif slide_type == 'AGENDA':
-                    processed_slides.append({
-                        'type': slide_type,
-                        'title': slide.get('title', 'Agenda'),
-                        'points': slide.get('points', [])
-                    })
-                elif slide_type in ['SECTION', 'BODY', 'CONTENT']:
-                    processed_slides.append({
-                        'type': 'SECTION',
-                        'title': slide.get('title', ''),
-                        'points': slide.get('points', []),
-                        'visual_guidance': slide.get('visual_guidance', '')
-                    })
-                elif slide_type == 'SUMMARY':
-                    processed_slides.append({
-                        'type': slide_type,
-                        'title': slide.get('title', 'Key Takeaways'),
-                        'points': slide.get('points', [])
-                    })
-                elif slide_type == 'CLOSING':
-                    processed_slides.append({
-                        'type': slide_type,
-                        'title': slide.get('title', 'Thank You'),
-                        'subtitle': slide.get('subtitle', ''),
-                        'contact': slide.get('contact', '')
-                    })
-            
-            if not processed_slides:
-                app.logger.error("No valid slides after processing")
+                # Clean special characters
+                content = (content
+                    .replace('"', '"')
+                    .replace('"', '"')
+                    .replace(''', "'")
+                    .replace(''', "'")
+                    .replace('…', '...')
+                    .replace('–', '-')
+                    .replace('—', '-')
+                )
+                
+                # Remove code blocks if present
+                content = re.sub(r'```json\s*|\s*```', '', content)
+                
+                # Remove any non-ASCII characters
+                content = ''.join(char for char in content if ord(char) < 128)
+                
+                # Parse the JSON
+                data = json.loads(content)
+                
+                # Extract slides array
+                if isinstance(data, dict) and 'slides' in data:
+                    slides = data['slides']
+                elif isinstance(data, list):
+                    slides = data
+                else:
+                    app.logger.error("Invalid response format")
+                    return None
+                
+                # Process slides
+                processed_slides = []
+                for slide in slides:
+                    if not isinstance(slide, dict):
+                        continue
+                        
+                    slide_type = slide.get('type', '').upper()
+                    
+                    # Process based on slide type
+                    if slide_type == 'TITLE':
+                        processed_slides.append({
+                            'type': slide_type,
+                            'title': slide.get('title', ''),
+                            'subtitle': slide.get('subtitle', ''),
+                            'presenter': slide.get('presenter', ''),
+                            'date': slide.get('date', '')
+                        })
+                    elif slide_type == 'AGENDA':
+                        processed_slides.append({
+                            'type': slide_type,
+                            'title': slide.get('title', 'Agenda'),
+                            'points': slide.get('points', [])
+                        })
+                    elif slide_type in ['SECTION', 'BODY', 'CONTENT']:
+                        processed_slides.append({
+                            'type': 'SECTION',
+                            'title': slide.get('title', ''),
+                            'points': slide.get('points', []),
+                            'visual_guidance': slide.get('visual_guidance', '')
+                        })
+                    elif slide_type == 'SUMMARY':
+                        processed_slides.append({
+                            'type': slide_type,
+                            'title': slide.get('title', 'Key Takeaways'),
+                            'points': slide.get('points', [])
+                        })
+                    elif slide_type == 'CLOSING':
+                        processed_slides.append({
+                            'type': slide_type,
+                            'title': slide.get('title', 'Thank You'),
+                            'subtitle': slide.get('subtitle', ''),
+                            'contact': slide.get('contact', '')
+                        })
+                
+                if not processed_slides:
+                    app.logger.error("No valid slides after processing")
+                    return None
+                    
+                return processed_slides
+            else:
+                app.logger.error("No valid JSON found in response")
                 return None
                 
-            return processed_slides
-            
         except json.JSONDecodeError as e:
             app.logger.error(f"JSON parsing error: {str(e)}")
             app.logger.error(f"Content that failed to parse: {content}")
