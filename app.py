@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 import re
 
 import openai
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, abort
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, abort
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
 from google.oauth2.credentials import Credentials
@@ -17,6 +17,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
 from themes import get_theme_choices
+from slides_generator import SlidesGenerator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
