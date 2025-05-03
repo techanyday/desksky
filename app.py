@@ -361,7 +361,8 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
         2. The 'content' field MUST be a list of strings
         3. Do not include any other fields
         4. Use simple quotes for strings
-        5. Keep text content simple and clean - no special characters"""
+        5. Keep text content simple and clean - no special characters
+        6. Return ONLY the JSON array, no other text"""
 
         # Create user prompt
         user_prompt = f"Create a {num_slides}-slide presentation about '{title}'. Topic focus: {topic}"
@@ -378,13 +379,31 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
 
         # Parse and validate the response
         content = completion.choices[0].message.content
-        app.logger.info(f"GPT Response: {content}")  # Log the response
+        app.logger.info(f"Raw GPT Response: {content}")  # Log raw response
         
-        # Clean up the response - remove any markdown code block markers
-        content = content.replace("```json", "").replace("```", "").strip()
+        # Clean up the response
+        content = (content
+            .replace("```json", "")
+            .replace("```", "")
+            .strip()
+            .replace('"', '"')  # Replace smart quotes
+            .replace('"', '"')
+            .replace(''', "'")
+            .replace(''', "'")
+            .replace('…', '...')
+            .replace('–', '-')
+            .replace('—', '-')
+        )
+        
+        app.logger.info(f"Cleaned GPT Response: {content}")  # Log cleaned response
         
         # Parse JSON
-        slides = json.loads(content)
+        try:
+            slides = json.loads(content)
+        except json.JSONDecodeError as e:
+            app.logger.error(f"JSON parsing error at position {e.pos}: {e.msg}")
+            app.logger.error(f"JSON snippet: {content[max(0, e.pos-50):min(len(content), e.pos+50)]}")
+            raise
         
         # Validate slides
         if not isinstance(slides, list):
@@ -394,13 +413,13 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
         processed_slides = []
         for i, slide in enumerate(slides):
             if not isinstance(slide, dict):
-                raise ValueError(f"Slide {i} is not a dictionary")
+                raise ValueError(f"Slide {i} is not a dictionary: {slide}")
             if 'title' not in slide:
-                raise ValueError(f"Slide {i} missing title field")
+                raise ValueError(f"Slide {i} missing title field: {slide}")
             if 'content' not in slide:
-                raise ValueError(f"Slide {i} missing content field")
+                raise ValueError(f"Slide {i} missing content field: {slide}")
             if not isinstance(slide['content'], list):
-                raise ValueError(f"Slide {i} content is not a list")
+                raise ValueError(f"Slide {i} content is not a list: {slide}")
                 
             processed_slide = {
                 'id': f'slide_{i+1}',

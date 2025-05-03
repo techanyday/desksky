@@ -233,7 +233,17 @@ class SlidesGenerator:
                     'objectId': slide['id'],
                     'slideLayoutReference': {
                         'predefinedLayout': 'TITLE_AND_BODY'
-                    }
+                    },
+                    'placeholderIdMappings': [
+                        {
+                            'layoutPlaceholder': {'type': 'TITLE'},
+                            'objectId': f"{slide['id']}_title"
+                        },
+                        {
+                            'layoutPlaceholder': {'type': 'BODY'},
+                            'objectId': f"{slide['id']}_body"
+                        }
+                    ]
                 }
             })
             
