@@ -196,39 +196,38 @@ Return a JSON object with this exact structure:
 def generate_slides_content(title, topic, num_slides):
     """Generate a complete, professional slide deck with GPT-3.5 Turbo."""
     try:
-        # Use Completion API
-        response = client.Completion.create(
-            engine="gpt-3.5-turbo-instruct",  # Use instruct model for completion
-            prompt=f"""You are a professional presentation content creator.
-Create an outline for a {num_slides}-slide presentation about {topic}.
-Return a JSON array of slide objects with this exact structure:
-[
-    {{
-        "type": "TITLE",
-        "main_points": ["Title", "Optional Subtitle"]
-    }},
-    {{
-        "type": "AGENDA",
-        "main_points": ["Point 1", "Point 2", "Point 3"]
-    }},
-    // ... more slides
-]""",
+        # Create a more specific prompt for better JSON structure
+        prompt = f"""Create a presentation outline about '{topic}' with {num_slides} slides.
+        Return a JSON array where each slide has:
+        - 'type': One of 'TITLE', 'AGENDA', 'BODY', 'EXAMPLES', 'CONCLUSION', 'REFERENCES'
+        - 'main_points': Array of strings, first is title, rest are bullet points
+        
+        Example format:
+        [
+            {{"type": "TITLE", "main_points": ["Main Title", "Subtitle"]}},
+            {{"type": "BODY", "main_points": ["Section Title", "Point 1", "Point 2"]}}
+        ]"""
+
+        response = openai.Completion.create(
+            model="gpt-3.5-turbo-instruct",
+            prompt=prompt,
             max_tokens=1000,
-            temperature=0.7,
-            n=1
+            temperature=0.7
         )
+        
         # Log the raw response for debugging
         logger.info(f"OpenAI raw response: {response}")
         
-        # Extract content from completion
-        content_str = response['choices'][0]['text'].strip()
+        # Extract the content
+        content_str = response.choices[0].text.strip()
         logger.info(f"Extracted content: {content_str}")
         
-        # Parse the JSON array
+        # Parse JSON content
         slides_content = json.loads(content_str)
         
-        # Transform each slide's content
+        # Transform content
         return transform_slide_content(slides_content)
+        
     except Exception as e:
         logger.error(f"Error generating slides content: {str(e)}")
         logger.error(f"Full error details: {e.__class__.__name__}: {str(e)}")
@@ -238,31 +237,52 @@ def transform_slide_content(content):
     """Transform the OpenAI response into slide content with proper layouts."""
     # Valid Google Slides predefined layouts
     slide_type_to_layout = {
-        'TITLE': 'TITLE_SLIDE',  
+        'TITLE': 'TITLE_SLIDE',
         'AGENDA': 'TITLE_AND_BODY',
         'BODY': 'TITLE_AND_BODY',
         'EXAMPLES': 'TITLE_AND_BODY',
         'CONCLUSION': 'TITLE_AND_BODY',
-        'REFERENCES': 'TITLE_AND_BODY'
+        'REFERENCES': 'TITLE_AND_BODY',
+        'SECTION': 'SECTION_HEADER',
+        'BLANK': 'BLANK',
+        'MAIN_POINT': 'TITLE_AND_BODY',
+        'SLIDE': 'TITLE_AND_BODY'  # Default for generic slides
     }
     
     slides = []
     for item in content:
-        slide = {
-            'layout': slide_type_to_layout[item['type']],
-            'title': item['main_points'][0] if item['main_points'] else '',
-            'elements': []
-        }
-        
-        # For title slides, add subtitle if available
-        if item['type'] == 'TITLE' and len(item['main_points']) > 1:
-            slide['subtitle'] = item['main_points'][1]
-        
-        # For other slides, add main points as bullet points
-        elif len(item['main_points']) > 1:
-            slide['elements'] = [{'text': point} for point in item['main_points'][1:]]
-        
-        slides.append(slide)
+        try:
+            # Get slide type, defaulting to 'SLIDE' if not present
+            slide_type = item.get('type', 'SLIDE')
+            
+            # Get layout, defaulting to 'TITLE_AND_BODY' if type not found
+            layout = slide_type_to_layout.get(slide_type, 'TITLE_AND_BODY')
+            
+            slide = {
+                'layout': layout,
+                'title': item['main_points'][0] if item.get('main_points') else '',
+                'elements': []
+            }
+            
+            # For title slides, add subtitle if available
+            if layout == 'TITLE_SLIDE' and item.get('main_points', []) and len(item['main_points']) > 1:
+                slide['subtitle'] = item['main_points'][1]
+            
+            # For other slides, add main points as bullet points
+            elif item.get('main_points', []) and len(item['main_points']) > 1:
+                slide['elements'] = [{'text': point} for point in item['main_points'][1:]]
+            
+            slides.append(slide)
+            
+        except Exception as e:
+            logger.error(f"Error transforming slide content: {str(e)}")
+            logger.error(f"Problematic item: {item}")
+            # Create a simple error slide instead of failing
+            slides.append({
+                'layout': 'TITLE_AND_BODY',
+                'title': 'Error Creating Slide',
+                'elements': [{'text': 'There was an error generating this slide content.'}]
+            })
     
     return slides
 
