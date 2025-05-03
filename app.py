@@ -172,9 +172,12 @@ def generate_slide_content_with_gpt(topic, slide_type):
             messages=[
                 {"role": "system", "content": "You are a professional presentation content creator."},
                 {"role": "user", "content": f"Create content for a {slide_type} slide about {topic}. Format: JSON with 'title' and 'content' keys."}
-            ]
+            ],
+            temperature=0.7
         )
-        return json.loads(response.choices[0].message.content)
+        # In v0.28, the response format is different
+        content_str = response['choices'][0]['message']['content']
+        return json.loads(content_str)
     except Exception as e:
         logger.error(f"Error generating slide content: {str(e)}")
         raise
@@ -188,9 +191,12 @@ def generate_slides_content(title, topic, num_slides):
             messages=[
                 {"role": "system", "content": "You are a professional presentation content creator."},
                 {"role": "user", "content": f"Create an outline for a {num_slides}-slide presentation about {topic}. For each slide, specify the type (TITLE, AGENDA, LANDSCAPE, IMPLEMENTATION, ROI_METRICS, or CONCLUSION) and main points. Format as JSON array."}
-            ]
+            ],
+            temperature=0.7
         )
-        return json.loads(response.choices[0].message.content)
+        # In v0.28, the response format is different
+        content_str = response['choices'][0]['message']['content']
+        return json.loads(content_str)
     except Exception as e:
         logger.error(f"Error generating slides content: {str(e)}")
         raise
