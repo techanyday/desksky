@@ -236,8 +236,9 @@ Return a JSON array of slide objects with this exact structure:
 
 def transform_slide_content(content):
     """Transform the OpenAI response into slide content with proper layouts."""
+    # Valid Google Slides predefined layouts
     slide_type_to_layout = {
-        'TITLE': 'TITLE',
+        'TITLE': 'TITLE_SLIDE',  
         'AGENDA': 'TITLE_AND_BODY',
         'BODY': 'TITLE_AND_BODY',
         'EXAMPLES': 'TITLE_AND_BODY',
@@ -270,7 +271,7 @@ def create_slide(service, presentation_id, slide_content, index):
     try:
         requests = []
         
-        # Create the slide
+        # Create the slide with correct layout reference
         requests.append({
             'createSlide': {
                 'objectId': f'slide_{index}',
@@ -281,33 +282,33 @@ def create_slide(service, presentation_id, slide_content, index):
             }
         })
 
-        # Get the created slide ID
         slide_id = f'slide_{index}'
 
         # Add title
         if 'title' in slide_content:
+            title_id = f'{slide_id}.TITLE' if slide_content['layout'] == 'TITLE_SLIDE' else f'{slide_id}.p.TITLE'
             requests.append({
                 'insertText': {
-                    'objectId': f'{slide_id}_title',
+                    'objectId': title_id,
                     'text': slide_content['title']
                 }
             })
 
         # Add subtitle for title slides
-        if slide_content.get('layout') == 'TITLE' and 'subtitle' in slide_content:
+        if slide_content.get('layout') == 'TITLE_SLIDE' and 'subtitle' in slide_content:
             requests.append({
                 'insertText': {
-                    'objectId': f'{slide_id}_subtitle',
+                    'objectId': f'{slide_id}.SUBTITLE',
                     'text': slide_content['subtitle']
                 }
             })
 
-        # Add elements (body content)
-        if 'elements' in slide_content:
+        # Add body content
+        if 'elements' in slide_content and slide_content['elements']:
             body_text = '\n• ' + '\n• '.join(element['text'] for element in slide_content['elements'])
             requests.append({
                 'insertText': {
-                    'objectId': f'{slide_id}_body',
+                    'objectId': f'{slide_id}.BODY',
                     'text': body_text.strip()
                 }
             })
