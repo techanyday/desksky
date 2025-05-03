@@ -355,57 +355,86 @@ def transform_slide_content(content):
 def create_slide(service, presentation_id, slide_content, index):
     """Create a slide and add content."""
     try:
-        requests = []
-        
-        # Create the slide with correct layout reference
-        requests.append({
-            'createSlide': {
-                'objectId': f'slide_{index}',
-                'insertionIndex': index,
-                'slideLayoutReference': {
-                    'predefinedLayout': slide_content.get('layout', 'ONE_COLUMN_TEXT')
-                }
+        # First create the slide
+        create_response = service.presentations().batchUpdate(
+            presentationId=presentation_id,
+            body={
+                'requests': [{
+                    'createSlide': {
+                        'objectId': f'slide_{index}',
+                        'insertionIndex': index,
+                        'slideLayoutReference': {
+                            'predefinedLayout': slide_content.get('layout', 'ONE_COLUMN_TEXT')
+                        }
+                    }
+                }]
             }
-        })
+        ).execute()
 
-        slide_id = f'slide_{index}'
+        # Get the created slide from the response
+        slide = create_response.get('replies', [{}])[0].get('createSlide', {})
+        slide_id = slide.get('objectId')
 
-        # Add title - all layouts have a CENTERED_TITLE placeholder
-        if 'title' in slide_content:
+        if not slide_id:
+            raise ValueError("Failed to get slide ID from create response")
+
+        # Get the layout-specific placeholder IDs
+        layout_placeholders = service.presentations().pages().get(
+            presentationId=presentation_id,
+            pageObjectId=slide_id
+        ).execute().get('pageElements', [])
+
+        # Map placeholder types to their IDs
+        placeholder_ids = {}
+        for element in layout_placeholders:
+            if 'shape' in element and 'placeholder' in element['shape']:
+                placeholder_type = element['shape']['placeholder'].get('type')
+                if placeholder_type:
+                    placeholder_ids[placeholder_type] = element['objectId']
+
+        # Prepare text insertion requests
+        requests = []
+
+        # Add title if we have a TITLE placeholder
+        if 'title' in slide_content and 'TITLE' in placeholder_ids:
             requests.append({
                 'insertText': {
-                    'objectId': f'{slide_id}.CENTERED_TITLE',
+                    'objectId': placeholder_ids['TITLE'],
                     'text': slide_content['title']
                 }
             })
 
-        # Add subtitle for title slides
-        if slide_content.get('layout') == 'TITLE' and 'subtitle' in slide_content:
+        # Add subtitle if we have a SUBTITLE placeholder
+        if 'subtitle' in slide_content and 'SUBTITLE' in placeholder_ids:
             requests.append({
                 'insertText': {
-                    'objectId': f'{slide_id}.SUBTITLE',
+                    'objectId': placeholder_ids['SUBTITLE'],
                     'text': slide_content['subtitle']
                 }
             })
 
-        # Add body content
-        if 'elements' in slide_content and slide_content['elements']:
+        # Add body content if we have a BODY placeholder
+        if 'elements' in slide_content and slide_content['elements'] and 'BODY' in placeholder_ids:
             body_text = '\n• ' + '\n• '.join(element['text'] for element in slide_content['elements'])
             requests.append({
                 'insertText': {
-                    'objectId': f'{slide_id}.BODY',
+                    'objectId': placeholder_ids['BODY'],
                     'text': body_text.strip()
                 }
             })
 
-        # Execute the requests
-        body = {'requests': requests}
-        response = service.presentations().batchUpdate(
-            presentationId=presentation_id, body=body).execute()
-        
-        return response
+        # Execute the text insertion requests if any
+        if requests:
+            service.presentations().batchUpdate(
+                presentationId=presentation_id,
+                body={'requests': requests}
+            ).execute()
+
+        return slide_id
+
     except Exception as e:
         logger.error(f"Error creating slide: {str(e)}")
+        logger.error(f"Slide content: {slide_content}")
         raise
 
 @app.route('/create-slides', methods=['GET', 'POST'])
