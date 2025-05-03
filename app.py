@@ -160,48 +160,6 @@ def init_db():
 # Initialize database on startup
 init_db()
 
-# Routes
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-def generate_slide_content_with_gpt(title, topic, num_slides):
-    """Generate slide content using GPT-3"""
-    try:
-        prompt = f"""Create a detailed presentation outline about {topic} with {num_slides} slides.
-        Return a JSON array where each object represents a slide with:
-        - "type": one of ["TITLE", "AGENDA", "BODY", "EXAMPLES", "CONCLUSION"]
-        - "main_points": array of bullet points for that slide
-        Format references without quotes. Example:
-        {{"type": "REFERENCES", "main_points": ["References", "1. The Future of AI by Stuart Russell", "2. Life 3.0 by Max Tegmark"]}}
-        """
-        
-        response = openai.Completion.create(
-            model="gpt-3.5-turbo-instruct",
-            prompt=prompt,
-            max_tokens=1000,
-            temperature=0.7
-        )
-        
-        logger.info(f"OpenAI raw response: {json.dumps(response, indent=2)}")
-        content = response.choices[0].text.strip()
-        logger.info(f"Raw content: {content}")
-        
-        # Clean up the content by replacing smart quotes and ensuring proper JSON format
-        content = content.replace('"', '"').replace('"', '"')
-        logger.info(f"Cleaned content: {content}")
-        
-        slides = json.loads(content)
-        return slides
-
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON parsing error: {str(e)}")
-        logger.error(f"Content that failed to parse: {content}")
-        return None
-    except Exception as e:
-        logger.error(f"Error generating slide content: {str(e)}")
-        return None
-
 def transform_slide_content(slide):
     """Transform the OpenAI response into slide content with proper layouts."""
     layout_mapping = {
@@ -213,7 +171,145 @@ def transform_slide_content(slide):
         'REFERENCES': 'TITLE_AND_BODY'
     }
     
-    return layout_mapping.get(slide.get('type', 'BODY'), 'TITLE_AND_BODY')
+    try:
+        slide_type = slide.get('type', 'BODY')
+        layout = layout_mapping.get(slide_type, 'TITLE_AND_BODY')
+        
+        # Create the slide creation request
+        create_request = {
+            'createSlide': {
+                'slideLayoutReference': {
+                    'predefinedLayout': layout
+                },
+                'placeholderIdMappings': []
+            }
+        }
+        
+        # Create text insertion requests based on main points
+        text_requests = []
+        main_points = slide.get('main_points', [])
+        
+        if main_points:
+            if layout == 'TITLE':
+                # For title slides, use first point as title, second as subtitle if available
+                text_requests.append({
+                    'insertText': {
+                        'objectId': '{{TITLE}}',
+                        'text': main_points[0]
+                    }
+                })
+                if len(main_points) > 1:
+                    text_requests.append({
+                        'insertText': {
+                            'objectId': '{{SUBTITLE}}',
+                            'text': main_points[1]
+                        }
+                    })
+            else:
+                # For other slides, first point is title, rest are bullet points
+                text_requests.append({
+                    'insertText': {
+                        'objectId': '{{TITLE}}',
+                        'text': main_points[0]
+                    }
+                })
+                if len(main_points) > 1:
+                    bullet_points = '\n• ' + '\n• '.join(main_points[1:])
+                    text_requests.append({
+                        'insertText': {
+                            'objectId': '{{BODY}}',
+                            'text': bullet_points.strip()
+                        }
+                    })
+        
+        return {
+            'layout': layout,
+            'create_request': create_request,
+            'text_requests': text_requests
+        }
+        
+    except Exception as e:
+        app.logger.error(f"Error transforming slide content: {str(e)}")
+        app.logger.error(f"Problematic slide content: {slide}")
+        return {
+            'layout': 'TITLE_AND_BODY',
+            'create_request': {
+                'createSlide': {
+                    'slideLayoutReference': {
+                        'predefinedLayout': 'TITLE_AND_BODY'
+                    }
+                }
+            },
+            'text_requests': []
+        }
+
+def generate_slide_content_with_gpt(title, topic, num_slides):
+    """Generate slide content using GPT-3"""
+    try:
+        prompt = f"""Create a detailed presentation outline about {topic} with {num_slides} slides.
+        Return a JSON array where each object represents a slide with:
+        - "type": one of ["TITLE", "AGENDA", "BODY", "EXAMPLES", "CONCLUSION", "REFERENCES"]
+        - "main_points": array of bullet points for that slide
+        
+        For references, DO NOT use quotes in the titles, use plain text. Example:
+        {{"type": "REFERENCES", "main_points": ["1. Book Title by Author", "2. Article Name by Publisher"]}}
+        
+        Return ONLY the JSON array, no other text."""
+        
+        response = openai.Completion.create(
+            model="gpt-3.5-turbo-instruct",
+            prompt=prompt,
+            max_tokens=1000,
+            temperature=0.7
+        )
+        
+        app.logger.info(f"OpenAI raw response: {json.dumps(response, indent=2)}")
+        content = response.choices[0].text.strip()
+        app.logger.info(f"Raw content: {content}")
+        
+        # Clean up the content
+        content = (content
+            .replace('"', '"')  # Replace smart quotes
+            .replace('"', '"')  # Replace smart quotes
+            .replace(''', "'")  # Replace smart apostrophes
+            .replace(''', "'")  # Replace smart apostrophes
+            .replace('…', '...') # Replace ellipsis
+            .replace('–', '-')  # Replace en dash
+            .replace('—', '-')  # Replace em dash
+        )
+        
+        # Remove any BOM or invisible characters
+        content = ''.join(char for char in content if ord(char) < 128)
+        
+        app.logger.info(f"Cleaned content: {content}")
+        
+        # Parse the JSON
+        try:
+            slides = json.loads(content)
+            if not isinstance(slides, list):
+                raise ValueError("Response is not a list")
+            return slides
+        except json.JSONDecodeError as e:
+            app.logger.error(f"JSON parsing error: {str(e)}")
+            app.logger.error(f"Content that failed to parse: {content}")
+            # Try to fix common JSON issues
+            content = content.strip()
+            if not content.startswith('['):
+                content = '[' + content
+            if not content.endswith(']'):
+                content = content + ']'
+            # Try parsing again
+            try:
+                slides = json.loads(content)
+                if not isinstance(slides, list):
+                    raise ValueError("Response is not a list")
+                return slides
+            except:
+                return None
+
+    except Exception as e:
+        app.logger.error(f"Error generating slide content: {str(e)}")
+        return None
 
 @app.route('/create-slides', methods=['GET', 'POST'])
 @login_required
@@ -221,7 +317,7 @@ def create_slides():
     if request.method == 'POST':
         title = request.form.get('title')
         topic = request.form.get('topic')
-        num_slides = int(request.form.get('num_slides', 5))  # Default to 5 slides
+        num_slides = int(request.form.get('num_slides', 5))
         
         try:
             # Create a new presentation
@@ -236,27 +332,62 @@ def create_slides():
             if not slides_content:
                 return jsonify({
                     'success': False, 
-                    'error': 'Failed to generate slide content'
+                    'error': 'Failed to generate slide content. Please try again.'
                 })
             
-            # Create slides
-            requests = []
-            for i, slide in enumerate(slides_content):
-                layout = transform_slide_content(slide)
-                requests.append({
-                    'createSlide': {
-                        'slideLayoutReference': {
-                            'predefinedLayout': layout
-                        },
-                        'placeholderIdMappings': []
-                    }
-                })
+            # Transform and create slides
+            all_requests = []
+            for slide in slides_content:
+                transformed = transform_slide_content(slide)
+                all_requests.append(transformed['create_request'])
             
-            # Execute the requests
-            service.presentations().batchUpdate(
+            # First create all slides
+            response = service.presentations().batchUpdate(
                 presentationId=presentation_id,
-                body={'requests': requests}
+                body={'requests': all_requests}
             ).execute()
+            
+            # Get the created slide IDs
+            slide_ids = []
+            for reply in response.get('replies', []):
+                if 'createSlide' in reply:
+                    slide_ids.append(reply['createSlide']['objectId'])
+            
+            # Now get the placeholder IDs for each slide
+            text_requests = []
+            for i, slide_id in enumerate(slide_ids):
+                # Get slide details
+                slide_details = service.presentations().pages().get(
+                    presentationId=presentation_id,
+                    pageObjectId=slide_id
+                ).execute()
+                
+                # Map placeholders to their IDs
+                placeholder_ids = {}
+                for element in slide_details.get('pageElements', []):
+                    if 'shape' in element and 'placeholder' in element['shape']:
+                        placeholder_type = element['shape']['placeholder'].get('type')
+                        if placeholder_type == 'TITLE':
+                            placeholder_ids['{{TITLE}}'] = element['objectId']
+                        elif placeholder_type == 'SUBTITLE':
+                            placeholder_ids['{{SUBTITLE}}'] = element['objectId']
+                        elif placeholder_type == 'BODY':
+                            placeholder_ids['{{BODY}}'] = element['objectId']
+                
+                # Replace placeholder IDs in text requests
+                transformed = transform_slide_content(slides_content[i])
+                for text_request in transformed['text_requests']:
+                    placeholder = text_request['insertText']['objectId']
+                    if placeholder in placeholder_ids:
+                        text_request['insertText']['objectId'] = placeholder_ids[placeholder]
+                        text_requests.append(text_request)
+            
+            # Execute text insertion requests
+            if text_requests:
+                service.presentations().batchUpdate(
+                    presentationId=presentation_id,
+                    body={'requests': text_requests}
+                ).execute()
             
             # Save to database
             try:
@@ -264,13 +395,13 @@ def create_slides():
                     user_id=current_user.id,
                     title=title,
                     num_slides=num_slides,
-                    status='pending',
+                    status='completed',
                     google_presentation_id=presentation_id
                 )
                 db.session.add(new_presentation)
                 db.session.commit()
             except Exception as e:
-                logger.error(f"Error saving presentation to database: {str(e)}")
+                app.logger.error(f"Error saving presentation to database: {str(e)}")
                 # Continue even if database save fails
             
             presentation_url = f"https://docs.google.com/presentation/d/{presentation_id}/edit"
@@ -280,13 +411,17 @@ def create_slides():
             })
             
         except Exception as e:
-            logger.error(f"Error creating presentation: {str(e)}")
+            app.logger.error(f"Error creating presentation: {str(e)}")
             return jsonify({
                 'success': False,
                 'error': str(e)
             })
     
     return render_template('create_slides.html')
+
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 @app.route('/presentation/<presentation_id>')
 @login_required
@@ -320,7 +455,7 @@ def view_presentation(presentation_id):
         )
         
     except Exception as e:
-        logger.error(f"Error viewing presentation: {str(e)}")
+        app.logger.error(f"Error viewing presentation: {str(e)}")
         flash('Error viewing presentation', 'error')
         return redirect(url_for('index'))
 
@@ -331,11 +466,11 @@ def pricing():
 @app.route('/login')
 def login():
     if current_user.is_authenticated:
-        logger.info("Already authenticated user attempting to login")
+        app.logger.info("Already authenticated user attempting to login")
         return redirect(url_for('index'))
     
     if not GOOGLE_CLIENT_CONFIG["web"]["client_id"] or not GOOGLE_CLIENT_CONFIG["web"]["client_secret"]:
-        logger.error("Missing OAuth credentials")
+        app.logger.error("Missing OAuth credentials")
         return render_template('error.html', 
                             error_code=500, 
                             error_message="OAuth not configured. Please contact support."), 500
@@ -350,10 +485,10 @@ def login():
         authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
         
         session['state'] = state
-        logger.info("Starting OAuth flow, redirecting to Google")
+        app.logger.info("Starting OAuth flow, redirecting to Google")
         return redirect(authorization_url)
     except Exception as e:
-        logger.error(f"Error in login route: {str(e)}", exc_info=True)
+        app.logger.error(f"Error in login route: {str(e)}", exc_info=True)
         return render_template('error.html', 
                             error_code=500, 
                             error_message="Authentication error. Please try again."), 500
@@ -393,23 +528,23 @@ def oauth2callback():
         user_info = service.userinfo().get().execute()
         email = user_info.get('email')
         
-        logger.info(f"Retrieved user info for email: {email}")
+        app.logger.info(f"Retrieved user info for email: {email}")
         
         # Create or get user
         user = User.query.filter_by(email=email).first()
         if not user:
-            logger.info(f"Creating new user for email: {email}")
+            app.logger.info(f"Creating new user for email: {email}")
             user = User(email=email)
             db.session.add(user)
             db.session.commit()
         
         login_user(user)
-        logger.info(f"Successfully logged in user: {email}")
+        app.logger.info(f"Successfully logged in user: {email}")
         
         return redirect(url_for('index'))
         
     except Exception as e:
-        logger.error(f"Error in OAuth callback: {str(e)}")
+        app.logger.error(f"Error in OAuth callback: {str(e)}")
         return f"Error: {str(e)}", 500
 
 def check_user_credits(user, num_slides):
