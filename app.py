@@ -23,7 +23,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
 
 # Initialize OpenAI client
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+client = OpenAI()  # Will automatically use OPENAI_API_KEY from environment
 
 # Database configuration
 if os.environ.get('DATABASE_URL'):
