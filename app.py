@@ -16,6 +16,7 @@ from googleapiclient.discovery import build
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
+from themes import get_theme_choices
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -516,6 +517,51 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
     except Exception as e:
         app.logger.error(f"Error generating slide content: {str(e)}")
         return None
+
+@app.route('/api/themes', methods=['GET'])
+def get_themes():
+    """Get available presentation themes."""
+    try:
+        themes = get_theme_choices()
+        return jsonify({'themes': themes})
+    except Exception as e:
+        app.logger.error(f"Error getting themes: {str(e)}")
+        return jsonify({'error': 'Failed to get themes'}), 500
+
+@app.route('/api/presentations', methods=['POST'])
+def create_presentation():
+    """Create a new presentation."""
+    try:
+        data = request.get_json()
+        title = data.get('title')
+        num_slides = int(data.get('num_slides', 8))
+        theme_id = data.get('theme_id', 'corporate')
+        
+        if not title:
+            return jsonify({'error': 'Title is required'}), 400
+            
+        credentials = credentials_from_session()
+        if not credentials:
+            return jsonify({'error': 'Not authenticated'}), 401
+            
+        # Create slides generator with selected theme
+        generator = SlidesGenerator(credentials, theme_id)
+        presentation_id = generator.create_presentation(title, num_slides)
+        
+        if not presentation_id:
+            return jsonify({'error': 'Failed to create presentation'}), 500
+            
+        # Get presentation URL
+        presentation_url = f"https://docs.google.com/presentation/d/{presentation_id}"
+        
+        return jsonify({
+            'presentation_id': presentation_id,
+            'url': presentation_url
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error creating presentation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/create-slides', methods=['GET', 'POST'])
 @login_required
