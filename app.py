@@ -329,45 +329,45 @@ def transform_slide_content(slide):
         }
 
 def generate_slide_content_with_gpt(title, topic, num_slides):
-    """Generate professional slide content using GPT-3"""
+    """Generate professional slide content using GPT-3.5"""
     try:
-        prompt = f"""Create a professional presentation about '{title}' with at least {max(8, num_slides)} slides.
+        system_prompt = """You are a professional presentation designer. Create high-quality, visually engaging slides with clear structure and professional formatting.
         Return ONLY a JSON object with a structured 'slides' array. Do not include any other text before or after the JSON.
         Each slide must follow this exact format:
 
-        {{
+        {
             "slides": [
-                {{
+                {
                     "type": "TITLE",
                     "title": "Main presentation title",
                     "subtitle": "Optional subtitle or context",
                     "presenter": "Optional presenter name",
                     "date": "Optional date"
-                }},
-                {{
+                },
+                {
                     "type": "AGENDA",
                     "title": "Agenda",
                     "points": ["Section 1", "Section 2", "Section 3"]
-                }},
-                {{
+                },
+                {
                     "type": "SECTION",
                     "title": "Clear section title",
                     "points": ["Key point 1", "Supporting detail", "Key conclusion"],
                     "visual_guidance": "Insert chart showing quarterly growth trends"
-                }},
-                {{
+                },
+                {
                     "type": "SUMMARY",
                     "title": "Key Takeaways",
                     "points": ["Main takeaway 1", "Main takeaway 2"]
-                }},
-                {{
+                },
+                {
                     "type": "CLOSING",
                     "title": "Thank You",
                     "subtitle": "Questions & Discussion",
                     "contact": "Optional contact information"
-                }}
+                }
             ]
-        }}
+        }
 
         Requirements:
         1. Return ONLY the JSON object, no other text
@@ -378,15 +378,17 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
         6. End with summary and closing slides
         7. Use professional business language
         8. Ensure logical flow between sections
-        9. Minimum 8 slides, maximum 12 slides
+        9. Minimum 8 slides, maximum 12 slides"""
 
-        Create a complete presentation about: {title}
+        user_prompt = f"""Create a professional presentation about '{title}' with at least {max(8, num_slides)} slides.
         Topic details: {topic if topic else 'Focus on key aspects and trends'}"""
 
-        response = openai.Completion.create(
-            model="gpt-3.5-turbo-instruct",
-            prompt=prompt,
-            max_tokens=2000,
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
             temperature=0.7
         )
         
@@ -395,7 +397,7 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
             return None
             
         # Get the content and find the JSON object
-        content = response.choices[0].text.strip()
+        content = response.choices[0].message['content'].strip()
         if not content:
             app.logger.error("Empty content from GPT")
             return None
