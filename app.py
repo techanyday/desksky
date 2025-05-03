@@ -335,14 +335,11 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
     try:
         # Create system prompt
         system_prompt = """You are a presentation content generator. Create professional presentation content based on the given title and topic.
-        Format the response as a list of JSON objects, one for each slide. Each slide MUST have these exact fields:
+        Return ONLY a JSON array of slides. Each slide MUST have exactly these fields:
         - "title": A clear, concise title for the slide
         - "content": A list of bullet points (3-5 points per slide)
         
-        The first slide should be a title slide, and the last slide should be a summary/conclusion slide.
-        Keep bullet points concise and impactful.
-        Do not include any other fields in the slide objects.
-        Avoid using special characters or apostrophes that might cause JSON parsing issues.
+        DO NOT include any other fields like 'type', 'main_points', etc.
         
         Example format:
         [
@@ -356,16 +353,16 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
             }
         ]
         
-        Important:
-        1. Each slide MUST have both 'title' and 'content' fields
-        2. The 'content' field MUST be a list of strings
-        3. Do not include any other fields
-        4. Use simple quotes for strings
-        5. Keep text content simple and clean - no special characters
-        6. Return ONLY the JSON array, no other text"""
+        Requirements:
+        1. First slide title should be the presentation title
+        2. Last slide should be a conclusion/summary
+        3. Each bullet point should be a complete, meaningful statement
+        4. Keep text simple - no special characters or formatting
+        5. Use only regular quotes (") and apostrophes (')
+        6. Return ONLY the JSON array - no other text, no markdown"""
 
         # Create user prompt
-        user_prompt = f"Create a {num_slides}-slide presentation about '{title}'. Topic focus: {topic}"
+        user_prompt = f"Create a {num_slides}-slide presentation about '{title}'. Focus: {topic}"
 
         # Get completion from OpenAI
         completion = openai.ChatCompletion.create(
@@ -379,7 +376,7 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
 
         # Parse and validate the response
         content = completion.choices[0].message.content
-        app.logger.info(f"Raw GPT Response: {content}")  # Log raw response
+        app.logger.info(f"Raw GPT Response: {content}")
         
         # Clean up the response
         content = (content
@@ -395,7 +392,7 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
             .replace('—', '-')
         )
         
-        app.logger.info(f"Cleaned GPT Response: {content}")  # Log cleaned response
+        app.logger.info(f"Cleaned GPT Response: {content}")
         
         # Parse JSON
         try:
@@ -407,11 +404,26 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
         
         # Validate slides
         if not isinstance(slides, list):
-            raise ValueError("GPT response is not a list of slides")
+            raise ValueError(f"GPT response is not a list: {slides}")
             
         # Process and validate each slide
         processed_slides = []
         for i, slide in enumerate(slides):
+            # Convert old format if needed
+            if isinstance(slide, dict) and 'type' in slide and 'main_points' in slide:
+                app.logger.warning(f"Converting old slide format: {slide}")
+                if slide['type'] == 'TITLE':
+                    slide = {
+                        'title': slide['main_points'][0],
+                        'content': slide['main_points'][1:] if len(slide['main_points']) > 1 else []
+                    }
+                else:
+                    slide = {
+                        'title': slide['main_points'][0],
+                        'content': slide['main_points'][1:]
+                    }
+
+            # Validate slide structure
             if not isinstance(slide, dict):
                 raise ValueError(f"Slide {i} is not a dictionary: {slide}")
             if 'title' not in slide:
