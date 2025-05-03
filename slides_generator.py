@@ -111,7 +111,7 @@ class SlidesGenerator:
                 'updateTextStyle': {
                     'objectId': f"{slide_id}_title",
                     'style': {
-                        'foregroundColor': self._create_color_style(self.theme['rgb_colors']['title_text'])['solidFill']['color'],
+                        'foregroundColor': self.theme['rgb_colors']['title_text'],
                         'fontSize': {
                             'magnitude': 24,
                             'unit': 'PT'
@@ -125,7 +125,7 @@ class SlidesGenerator:
                 'updateTextStyle': {
                     'objectId': f"{slide_id}_body",
                     'style': {
-                        'foregroundColor': self._create_color_style(self.theme['rgb_colors']['body_text'])['solidFill']['color'],
+                        'foregroundColor': self.theme['rgb_colors']['body_text'],
                         'fontSize': {
                             'magnitude': 18,
                             'unit': 'PT'
@@ -153,9 +153,7 @@ class SlidesGenerator:
         """Create a color style for Google Slides API."""
         return {
             'solidFill': {
-                'color': {
-                    'rgbColor': rgb_color
-                }
+                'color': rgb_color
             }
         }
 
@@ -356,7 +354,7 @@ class SlidesGenerator:
             'updateTextStyle': {
                 'objectId': title_id,
                 'style': {
-                    'foregroundColor': self._create_color_style(self.theme['rgb_colors']['title_text'])['solidFill']['color'],
+                    'foregroundColor': self.theme['rgb_colors']['title_text'],
                     'fontSize': {
                         'magnitude': 24,
                         'unit': 'PT'
@@ -384,7 +382,7 @@ class SlidesGenerator:
             'updateTextStyle': {
                 'objectId': body_id,
                 'style': {
-                    'foregroundColor': self._create_color_style(self.theme['rgb_colors']['body_text'])['solidFill']['color'],
+                    'foregroundColor': self.theme['rgb_colors']['body_text'],
                     'fontSize': {
                         'magnitude': 18,
                         'unit': 'PT'

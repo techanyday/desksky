@@ -4,7 +4,12 @@ def hex_to_rgb_float(hex_color):
     """Convert hex color to RGB floats (0-1 range)."""
     hex_color = hex_color.lstrip('#')
     rgb = tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
-    return {'red': rgb[0], 'green': rgb[1], 'blue': rgb[2]}
+    return {
+        'red': rgb[0],
+        'green': rgb[1],
+        'blue': rgb[2],
+        'alpha': 1.0
+    }
 
 PRESENTATION_THEMES = {
     'corporate': {
