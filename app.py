@@ -28,7 +28,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Initialize OpenAI client
-client = openai.ChatCompletion  # Use ChatCompletion directly
+client = openai  # Use Completion API directly
 
 # Database configuration
 if os.environ.get('DATABASE_URL'):
@@ -166,39 +166,54 @@ def index():
 
 def generate_slide_content_with_gpt(topic, slide_type):
     try:
-        # Use legacy OpenAI API
-        response = client.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a professional presentation content creator."},
-                {"role": "user", "content": f"Create content for a {slide_type} slide about {topic}. Format: JSON with 'title' and 'content' keys."}
-            ],
-            temperature=0.7
+        # Use Completion API
+        response = client.Completion.create(
+            engine="gpt-3.5-turbo-instruct",  # Use instruct model for completion
+            prompt=f"""You are a professional presentation content creator.
+Create content for a {slide_type} slide about {topic}.
+Format the response as valid JSON with 'title' and 'content' keys.""",
+            max_tokens=500,
+            temperature=0.7,
+            n=1
         )
-        # In v0.28, the response format is different
-        content_str = response['choices'][0]['message']['content']
+        # Log the raw response for debugging
+        logger.info(f"OpenAI raw response: {response}")
+        
+        # Extract content from completion
+        content_str = response['choices'][0]['text'].strip()
+        logger.info(f"Extracted content: {content_str}")
+        
         return json.loads(content_str)
     except Exception as e:
         logger.error(f"Error generating slide content: {str(e)}")
+        logger.error(f"Full error details: {e.__class__.__name__}: {str(e)}")
         raise
 
 def generate_slides_content(title, topic, num_slides):
     """Generate a complete, professional slide deck with GPT-3.5 Turbo."""
     try:
-        # Use legacy OpenAI API
-        response = client.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a professional presentation content creator."},
-                {"role": "user", "content": f"Create an outline for a {num_slides}-slide presentation about {topic}. For each slide, specify the type (TITLE, AGENDA, LANDSCAPE, IMPLEMENTATION, ROI_METRICS, or CONCLUSION) and main points. Format as JSON array."}
-            ],
-            temperature=0.7
+        # Use Completion API
+        response = client.Completion.create(
+            engine="gpt-3.5-turbo-instruct",  # Use instruct model for completion
+            prompt=f"""You are a professional presentation content creator.
+Create an outline for a {num_slides}-slide presentation about {topic}.
+For each slide, specify the type (TITLE, AGENDA, LANDSCAPE, IMPLEMENTATION, ROI_METRICS, or CONCLUSION) and main points.
+Format the response as a valid JSON array.""",
+            max_tokens=1000,
+            temperature=0.7,
+            n=1
         )
-        # In v0.28, the response format is different
-        content_str = response['choices'][0]['message']['content']
+        # Log the raw response for debugging
+        logger.info(f"OpenAI raw response: {response}")
+        
+        # Extract content from completion
+        content_str = response['choices'][0]['text'].strip()
+        logger.info(f"Extracted content: {content_str}")
+        
         return json.loads(content_str)
     except Exception as e:
         logger.error(f"Error generating slides content: {str(e)}")
+        logger.error(f"Full error details: {e.__class__.__name__}: {str(e)}")
         raise
 
 def create_layout_request(layout_type, slide_id, elements):
