@@ -1,45 +1,59 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mt-5">
+<div class="container py-5">
     <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h3 class="text-center">Create Presentation</h3>
+        <div class="col-lg-8">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white py-3">
+                    <h3 class="card-title text-center mb-0">Create Presentation</h3>
                 </div>
-                <div class="card-body">
+                <div class="card-body p-4">
                     <form id="presentationForm" method="POST">
-                        <div class="form-group mb-3">
-                            <label for="title">Presentation Title</label>
-                            <input type="text" class="form-control" id="title" name="title" required>
+                        <div class="mb-4">
+                            <label for="title" class="form-label">Presentation Title</label>
+                            <input type="text" class="form-control form-control-lg" id="title" name="title" required 
+                                   placeholder="Enter your presentation title">
                         </div>
                         
-                        <div class="form-group mb-3">
-                            <label for="numSlides">Number of Slides</label>
-                            <input type="number" class="form-control" id="numSlides" name="numSlides" value="8" min="8" max="15">
+                        <div class="mb-4">
+                            <label for="numSlides" class="form-label">Number of Slides</label>
+                            <div class="d-flex align-items-center gap-3">
+                                <input type="range" class="form-range flex-grow-1" id="numSlides" name="numSlides" 
+                                       value="8" min="3" max="10" oninput="updateSlideCount(this.value)">
+                                <span id="slideCount" class="badge bg-primary px-3 py-2">8 slides</span>
+                            </div>
                         </div>
                         
-                        <div class="form-group mb-3">
-                            <label for="themeSelect">Color Theme</label>
-                            <select class="form-control" id="themeSelect" name="themeId">
+                        <div class="mb-4">
+                            <label for="themeSelect" class="form-label">Color Theme</label>
+                            <select class="form-select form-select-lg" id="themeSelect" name="themeId">
                                 <!-- Themes will be populated via JavaScript -->
                             </select>
-                            <small class="form-text text-muted">
-                                Select a color scheme for your presentation
-                            </small>
+                            <div class="form-text">Choose a color scheme for your presentation</div>
                         </div>
 
-                        <div class="theme-preview mt-3 mb-3 p-3 rounded" style="display: none;">
-                            <h5>Theme Preview</h5>
-                            <div class="preview-box p-2 mb-2">
-                                <div class="preview-title"></div>
-                                <div class="preview-body"></div>
+                        <div class="theme-preview mt-4 mb-4 p-4 rounded-3 d-none">
+                            <h5 class="mb-3">Theme Preview</h5>
+                            <div class="preview-box p-4 rounded-3">
+                                <div class="preview-title h4 mb-3"></div>
+                                <div class="preview-body">
+                                    <ul class="list-unstyled mb-0">
+                                        <li class="mb-2">• Sample bullet point</li>
+                                        <li>• Another bullet point</li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
                         
                         <div class="text-center">
-                            <button type="submit" class="btn btn-primary">Generate Presentation</button>
+                            <button type="submit" class="btn btn-primary btn-lg px-5">
+                                <span class="normal-text">Generate Presentation</span>
+                                <span class="loading-text d-none">
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                    Creating...
+                                </span>
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -50,18 +64,18 @@
 
 <style>
 .theme-preview {
-    border: 1px solid #ddd;
+    border: 1px solid rgba(0,0,0,0.1);
+    background: rgba(0,0,0,0.02);
 }
 .preview-box {
-    min-height: 100px;
+    min-height: 120px;
+    transition: all 0.3s ease;
 }
-.preview-title {
-    font-size: 1.2em;
-    font-weight: bold;
-    margin-bottom: 10px;
+.form-range::-webkit-slider-thumb {
+    cursor: pointer;
 }
-.preview-body {
-    font-size: 1em;
+.form-range::-webkit-slider-runnable-track {
+    cursor: pointer;
 }
 </style>
 
@@ -72,11 +86,22 @@ document.addEventListener('DOMContentLoaded', function() {
     const previewBox = document.querySelector('.preview-box');
     const previewTitle = document.querySelector('.preview-title');
     const previewBody = document.querySelector('.preview-body');
+    const form = document.getElementById('presentationForm');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const normalText = submitBtn.querySelector('.normal-text');
+    const loadingText = submitBtn.querySelector('.loading-text');
     
     // Fetch available themes
     fetch('/api/themes')
         .then(response => response.json())
         .then(data => {
+            // Add default option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'Select a theme';
+            themeSelect.appendChild(defaultOption);
+            
+            // Add theme options
             data.themes.forEach(theme => {
                 const option = document.createElement('option');
                 option.value = theme.id;
@@ -89,7 +114,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle theme selection change
     themeSelect.addEventListener('change', function() {
         const selectedTheme = this.value;
-        themePreview.style.display = 'block';
+        if (!selectedTheme) {
+            themePreview.classList.add('d-none');
+            return;
+        }
+        
+        themePreview.classList.remove('d-none');
         
         // Update preview with theme colors
         fetch('/api/themes')
@@ -102,20 +132,24 @@ document.addEventListener('DOMContentLoaded', function() {
                     previewBody.style.color = theme.colors.body_text;
                     
                     // Show sample content
-                    previewTitle.textContent = 'Sample Title';
-                    previewBody.innerHTML = '• Sample bullet point<br>• Another bullet point';
+                    previewTitle.textContent = 'Sample Slide Title';
                 }
             });
     });
     
     // Handle form submission
-    document.getElementById('presentationForm').addEventListener('submit', function(e) {
+    form.addEventListener('submit', function(e) {
         e.preventDefault();
+        
+        // Show loading state
+        submitBtn.disabled = true;
+        normalText.classList.add('d-none');
+        loadingText.classList.remove('d-none');
         
         const formData = {
             title: document.getElementById('title').value,
             num_slides: parseInt(document.getElementById('numSlides').value),
-            theme_id: document.getElementById('themeSelect').value
+            theme_id: document.getElementById('themeSelect').value || 'corporate'
         };
         
         fetch('/api/presentations', {
@@ -131,13 +165,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 window.location.href = data.url;
             } else {
                 alert('Error creating presentation: ' + (data.error || 'Unknown error'));
+                // Reset button state
+                submitBtn.disabled = false;
+                normalText.classList.remove('d-none');
+                loadingText.classList.add('d-none');
             }
         })
         .catch(error => {
             console.error('Error:', error);
             alert('Error creating presentation');
+            // Reset button state
+            submitBtn.disabled = false;
+            normalText.classList.remove('d-none');
+            loadingText.classList.add('d-none');
         });
     });
 });
+
+function updateSlideCount(value) {
+    document.getElementById('slideCount').textContent = value + ' slides';
+}
 </script>
 {% endblock %}

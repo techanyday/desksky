@@ -1,34 +1,81 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="max-w-4xl mx-auto text-center">
-    <h1 class="text-4xl font-bold text-gray-800 mb-8">Create Beautiful Presentations with AI</h1>
-    <p class="text-xl text-gray-600 mb-12">Transform your ideas into professional Google Slides presentations in seconds</p>
-    
-    <div class="bg-white rounded-lg shadow-lg p-8 mb-12">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div class="text-center">
-                <div class="text-3xl font-bold text-blue-600 mb-2">3-10</div>
-                <div class="text-gray-600">Slides per presentation</div>
-            </div>
-            <div class="text-center">
-                <div class="text-3xl font-bold text-blue-600 mb-2">5</div>
-                <div class="text-gray-600">Bullet points per slide</div>
-            </div>
-            <div class="text-center">
-                <div class="text-3xl font-bold text-blue-600 mb-2">3</div>
-                <div class="text-gray-600">Free presentations</div>
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-10 text-center">
+            <div class="hero-section py-5">
+                <h1 class="display-4 fw-bold mb-4">Create Beautiful Presentations with AI</h1>
+                <p class="lead text-muted mb-5">Transform your ideas into professional Google Slides presentations in seconds</p>
+                
+                <div class="card shadow-lg mb-5">
+                    <div class="card-body p-5">
+                        <div class="row g-4">
+                            <div class="col-md-4">
+                                <div class="feature-item">
+                                    <div class="display-6 text-primary mb-3">3-10</div>
+                                    <h5 class="fw-bold">Slides per presentation</h5>
+                                    <p class="text-muted">Optimal length for impact</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="feature-item">
+                                    <div class="display-6 text-primary mb-3">5</div>
+                                    <h5 class="fw-bold">Bullet points per slide</h5>
+                                    <p class="text-muted">Clear and concise content</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="feature-item">
+                                    <div class="display-6 text-primary mb-3">3</div>
+                                    <h5 class="fw-bold">Free presentations</h5>
+                                    <p class="text-muted">Try it risk-free</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-center gap-3">
+                    {% if current_user.is_authenticated %}
+                        <a href="/create-slides" class="btn btn-primary btn-lg px-5">Create Presentation</a>
+                    {% else %}
+                        <a href="/login" class="btn btn-primary btn-lg px-5">Get Started</a>
+                    {% endif %}
+                    <a href="/pricing" class="btn btn-outline-primary btn-lg px-5">View Pricing</a>
+                </div>
             </div>
         </div>
     </div>
-
-    <div class="flex justify-center space-x-4">
-        {% if current_user.is_authenticated %}
-            <a href="/create-slides" class="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700">Create Presentation</a>
-        {% else %}
-            <a href="/login" class="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700">Get Started</a>
-        {% endif %}
-        <a href="/pricing" class="border border-blue-600 text-blue-600 px-8 py-3 rounded-lg hover:bg-blue-50">View Pricing</a>
-    </div>
 </div>
+
+<style>
+.hero-section {
+    background: linear-gradient(to bottom, rgba(13, 110, 253, 0.05), rgba(13, 110, 253, 0));
+    border-radius: 1rem;
+    padding: 3rem 1rem;
+}
+
+.feature-item {
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    transition: transform 0.2s;
+}
+
+.feature-item:hover {
+    transform: translateY(-5px);
+}
+
+.btn-lg {
+    padding: 0.8rem 2rem;
+    font-weight: 500;
+}
+
+.display-4 {
+    background: linear-gradient(120deg, #0d6efd, #0099ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+</style>
 {% endblock %}
