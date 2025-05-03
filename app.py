@@ -298,64 +298,70 @@ def generate_slides_content(title, topic, num_slides):
         logger.error(f"Full error details: {e.__class__.__name__}: {str(e)}")
         raise
 
-def transform_slide_content(content):
+def transform_slide_content(slides_content):
     """Transform the OpenAI response into slide content with proper layouts."""
-    # Valid Google Slides predefined layouts
-    # Reference: https://developers.google.com/slides/api/reference/rest/v1/presentations.pages#Layout
-    slide_type_to_layout = {
-        'TITLE': 'TITLE',  # Changed from TITLE_SLIDE
+    transformed_slides = []
+    
+    # Map of slide types to valid Google Slides predefined layouts
+    LAYOUT_MAPPING = {
+        'TITLE': 'TITLE',
         'AGENDA': 'SECTION_HEADER',
-        'BODY': 'ONE_COLUMN_TEXT',
-        'EXAMPLES': 'MAIN_POINT',
+        'BODY': 'TITLE_AND_BODY',
+        'EXAMPLES': 'TITLE_AND_BODY',
         'CONCLUSION': 'SECTION_HEADER',
-        'REFERENCES': 'CAPTION',
-        'SECTION': 'SECTION_HEADER',
-        'BLANK': 'BLANK',
-        'MAIN_POINT': 'MAIN_POINT',
-        'SLIDE': 'ONE_COLUMN_TEXT'  # Default for generic slides
+        'REFERENCES': 'TITLE_AND_BODY'
     }
     
-    slides = []
-    for item in content:
-        try:
-            # Get slide type, defaulting to 'SLIDE' if not present
-            slide_type = item.get('type', 'SLIDE')
+    for slide in slides_content:
+        slide_type = slide.get('type', 'BODY')
+        main_points = slide.get('main_points', [])
+        
+        if not main_points:
+            continue
             
-            # Get layout, defaulting to 'ONE_COLUMN_TEXT' if type not found
-            layout = slide_type_to_layout.get(slide_type, 'ONE_COLUMN_TEXT')
-            
-            slide = {
-                'layout': layout,
-                'title': item['main_points'][0] if item.get('main_points') else '',
-                'elements': []
-            }
-            
-            # For title slides, add subtitle if available
-            if layout == 'TITLE' and item.get('main_points', []) and len(item['main_points']) > 1:
-                slide['subtitle'] = item['main_points'][1]
-            
-            # For other slides, add main points as bullet points
-            elif item.get('main_points', []) and len(item['main_points']) > 1:
-                slide['elements'] = [{'text': point} for point in item['main_points'][1:]]
-            
-            slides.append(slide)
-            
-        except Exception as e:
-            logger.error(f"Error transforming slide content: {str(e)}")
-            logger.error(f"Problematic item: {item}")
-            # Create a simple error slide instead of failing
-            slides.append({
-                'layout': 'ONE_COLUMN_TEXT',
-                'title': 'Error Creating Slide',
-                'elements': [{'text': 'There was an error generating this slide content.'}]
-            })
+        # Get the appropriate layout, defaulting to TITLE_AND_BODY
+        layout = LAYOUT_MAPPING.get(slide_type, 'TITLE_AND_BODY')
+        
+        transformed_slide = {
+            'layout': layout,
+            'title': main_points[0] if main_points else 'Untitled Slide'
+        }
+        
+        # Handle different layouts
+        if layout == 'TITLE':
+            transformed_slide['subtitle'] = main_points[1] if len(main_points) > 1 else ''
+        else:
+            # For non-title slides, all points after the first one become bullet points
+            transformed_slide['elements'] = [
+                {'text': point} for point in main_points[1:]
+            ]
+        
+        transformed_slides.append(transformed_slide)
     
-    return slides
+    return transformed_slides
 
 def create_slide(service, presentation_id, slide_content, index):
     """Create a slide and add content."""
     try:
-        # First create the slide
+        # First create the slide with valid layout
+        layout = slide_content.get('layout', 'TITLE_AND_BODY')
+        
+        # Official Google Slides predefined layouts
+        VALID_LAYOUTS = {
+            'BLANK',
+            'TITLE',
+            'TITLE_AND_BODY',
+            'SECTION_HEADER',
+            'TITLE_ONLY',
+            'TITLE_AND_TWO_COLUMNS',
+            'TITLE_AND_TWO_COLUMNS_AND_BODY',
+            'TITLE_AND_BIG_BODY',
+            'SECTION_TITLE_AND_DESCRIPTION'
+        }
+        
+        if layout not in VALID_LAYOUTS:
+            layout = 'TITLE_AND_BODY'  # Default to safe layout
+        
         create_response = service.presentations().batchUpdate(
             presentationId=presentation_id,
             body={
@@ -364,7 +370,7 @@ def create_slide(service, presentation_id, slide_content, index):
                         'objectId': f'slide_{index}',
                         'insertionIndex': index,
                         'slideLayoutReference': {
-                            'predefinedLayout': slide_content.get('layout', 'ONE_COLUMN_TEXT')
+                            'predefinedLayout': layout
                         }
                     }
                 }]
