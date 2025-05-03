@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 from functools import wraps
 from urllib.parse import urlencode
+import re
 
 import openai
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, abort
@@ -193,16 +194,32 @@ Return a JSON object with this exact structure:
         logger.error(f"Full error details: {e.__class__.__name__}: {str(e)}")
         raise
 
+def clean_json_string(s):
+    """Clean a JSON string to ensure it's valid."""
+    # Remove any whitespace before/after
+    s = s.strip()
+    
+    # Remove any trailing commas in arrays
+    s = re.sub(r',(\s*[\]}])', r'\1', s)
+    
+    # Ensure the string starts with [ and ends with ]
+    if not s.startswith('['):
+        s = '[' + s
+    if not s.endswith(']'):
+        s = s + ']'
+    
+    return s
+
 def generate_slides_content(title, topic, num_slides):
     """Generate a complete, professional slide deck with GPT-3.5 Turbo."""
     try:
         # Create a more specific prompt for better JSON structure
         prompt = f"""Create a presentation outline about '{topic}' with {num_slides} slides.
-        Return a JSON array where each slide has:
+        Return a valid JSON array where each slide has:
         - 'type': One of 'TITLE', 'AGENDA', 'BODY', 'EXAMPLES', 'CONCLUSION', 'REFERENCES'
         - 'main_points': Array of strings, first is title, rest are bullet points
         
-        Example format (do not include trailing commas):
+        Return ONLY the JSON array, no other text. Format:
         [
             {{"type": "TITLE", "main_points": ["Main Title", "Subtitle"]}},
             {{"type": "BODY", "main_points": ["Section Title", "Point 1", "Point 2"]}}
@@ -220,33 +237,61 @@ def generate_slides_content(title, topic, num_slides):
         
         # Extract and clean the content
         content_str = response.choices[0].text.strip()
-        # Remove any trailing commas before closing brackets
-        content_str = content_str.replace(',]', ']').replace(',\n]', '\n]')
-        logger.info(f"Extracted content: {content_str}")
+        logger.info(f"Raw content: {content_str}")
+        
+        # Clean the JSON string
+        content_str = clean_json_string(content_str)
+        logger.info(f"Cleaned content: {content_str}")
         
         try:
             # Parse JSON content
             slides_content = json.loads(content_str)
             
-            # Validate the structure
-            if not isinstance(slides_content, list):
+            # Ensure it's a list
+            if isinstance(slides_content, dict):
+                slides_content = [slides_content]
+            elif not isinstance(slides_content, list):
                 raise ValueError("Content must be a list of slides")
             
+            # Validate and fix each slide
+            valid_slides = []
             for slide in slides_content:
                 if not isinstance(slide, dict):
-                    raise ValueError("Each slide must be a dictionary")
-                if 'type' not in slide or 'main_points' not in slide:
-                    raise ValueError("Each slide must have 'type' and 'main_points'")
+                    continue
+                    
+                # Ensure required fields exist
+                if 'type' not in slide:
+                    slide['type'] = 'BODY'
+                if 'main_points' not in slide:
+                    slide['main_points'] = ['Untitled Slide']
+                
+                # Ensure main_points is a list
                 if not isinstance(slide['main_points'], list):
-                    raise ValueError("main_points must be a list")
+                    slide['main_points'] = [str(slide['main_points'])]
+                
+                # Ensure at least one main point
+                if not slide['main_points']:
+                    slide['main_points'] = ['Untitled Slide']
+                
+                valid_slides.append(slide)
+            
+            if not valid_slides:
+                raise ValueError("No valid slides found in content")
             
             # Transform content
-            return transform_slide_content(slides_content)
+            return transform_slide_content(valid_slides)
             
         except json.JSONDecodeError as e:
             logger.error(f"JSON parsing error: {str(e)}")
             logger.error(f"Content that failed to parse: {content_str}")
-            raise
+            # Create a basic slide deck as fallback
+            fallback_slides = [
+                {"type": "TITLE", "main_points": [topic, "Generated Presentation"]},
+                {"type": "BODY", "main_points": ["Error Creating Slides", 
+                    "There was an error generating the slide content.",
+                    "Please try again with different parameters."]}
+            ]
+            return transform_slide_content(fallback_slides)
         
     except Exception as e:
         logger.error(f"Error generating slides content: {str(e)}")
