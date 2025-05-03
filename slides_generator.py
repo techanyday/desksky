@@ -149,25 +149,15 @@ class SlidesGenerator:
         
         return requests
 
-    def _create_color_style(self, hex_color):
-        """Convert hex color to Google Slides RGB format."""
-        rgb = self._hex_to_rgb(hex_color)
+    def _create_color_style(self, rgb_color):
+        """Create a color style for Google Slides API."""
         return {
             'solidFill': {
                 'color': {
-                    'rgbColor': {
-                        'red': rgb[0] / 255,
-                        'green': rgb[1] / 255,
-                        'blue': rgb[2] / 255
-                    }
+                    'rgbColor': rgb_color
                 }
             }
         }
-
-    def _hex_to_rgb(self, hex_color):
-        """Convert hex color to RGB."""
-        hex_color = hex_color.lstrip('#')
-        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
     def create_presentation(self, title, num_slides):
         """Create a Google Slides presentation"""
