@@ -193,50 +193,6 @@ Return a JSON object with this exact structure:
         logger.error(f"Full error details: {e.__class__.__name__}: {str(e)}")
         raise
 
-def transform_slide_content(raw_content):
-    """Transform the raw slide content into the expected format."""
-    if 'type' in raw_content:  # Handle outline format
-        slide_type = raw_content['type']
-        points = raw_content['main_points']
-        
-        if slide_type == 'TITLE':
-            return {
-                'layout': 'TITLE_HERO',
-                'title': points[0],
-                'subtitle': points[1] if len(points) > 1 else '',
-                'footer': 'Powered by DeckSky AI'
-            }
-        elif slide_type == 'AGENDA':
-            return {
-                'layout': 'SECTION_HEADER',
-                'title': 'Agenda',
-                'elements': [{
-                    'shape': 'ROUNDED_RECTANGLE',
-                    'text': '📋 Key Topics\n\n• ' + '\n• '.join(points),
-                    'style': {'alignment': 'START', 'accent_color': '#4285f4'}
-                }]
-            }
-        else:
-            return {
-                'layout': 'TWO_COLUMNS',
-                'title': points[0],
-                'elements': [{
-                    'shape': 'RECTANGLE',
-                    'text': '\n• '.join([''] + points[1:]),
-                    'style': {'alignment': 'START', 'accent_color': '#34a853'}
-                }]
-            }
-    else:  # Handle individual slide format
-        return {
-            'layout': 'TWO_COLUMNS',
-            'title': raw_content['title'],
-            'elements': [{
-                'shape': 'RECTANGLE',
-                'text': '\n• '.join([''] + raw_content['content']),
-                'style': {'alignment': 'START', 'accent_color': '#34a853'}
-            }]
-        }
-
 def generate_slides_content(title, topic, num_slides):
     """Generate a complete, professional slide deck with GPT-3.5 Turbo."""
     try:
@@ -272,11 +228,42 @@ Return a JSON array of slide objects with this exact structure:
         slides_content = json.loads(content_str)
         
         # Transform each slide's content
-        return [transform_slide_content(slide) for slide in slides_content]
+        return transform_slide_content(slides_content)
     except Exception as e:
         logger.error(f"Error generating slides content: {str(e)}")
         logger.error(f"Full error details: {e.__class__.__name__}: {str(e)}")
         raise
+
+def transform_slide_content(content):
+    """Transform the OpenAI response into slide content with proper layouts."""
+    slide_type_to_layout = {
+        'TITLE': 'TITLE',
+        'AGENDA': 'TITLE_AND_BODY',
+        'BODY': 'TITLE_AND_BODY',
+        'EXAMPLES': 'TITLE_AND_BODY',
+        'CONCLUSION': 'TITLE_AND_BODY',
+        'REFERENCES': 'TITLE_AND_BODY'
+    }
+    
+    slides = []
+    for item in content:
+        slide = {
+            'layout': slide_type_to_layout[item['type']],
+            'title': item['main_points'][0] if item['main_points'] else '',
+            'elements': []
+        }
+        
+        # For title slides, add subtitle if available
+        if item['type'] == 'TITLE' and len(item['main_points']) > 1:
+            slide['subtitle'] = item['main_points'][1]
+        
+        # For other slides, add main points as bullet points
+        elif len(item['main_points']) > 1:
+            slide['elements'] = [{'text': point} for point in item['main_points'][1:]]
+        
+        slides.append(slide)
+    
+    return slides
 
 def create_slide(service, presentation_id, slide_content, index):
     """Create a slide and add content."""
@@ -307,7 +294,7 @@ def create_slide(service, presentation_id, slide_content, index):
             })
 
         # Add subtitle for title slides
-        if slide_content.get('layout') == 'TITLE_HERO' and 'subtitle' in slide_content:
+        if slide_content.get('layout') == 'TITLE' and 'subtitle' in slide_content:
             requests.append({
                 'insertText': {
                     'objectId': f'{slide_id}_subtitle',
@@ -317,52 +304,13 @@ def create_slide(service, presentation_id, slide_content, index):
 
         # Add elements (body content)
         if 'elements' in slide_content:
-            for i, element in enumerate(slide_content['elements']):
-                # Create text box
-                box_id = f'{slide_id}_body_{i}'
-                requests.append({
-                    'createShape': {
-                        'objectId': box_id,
-                        'shapeType': element.get('shape', 'RECTANGLE'),
-                        'elementProperties': {
-                            'pageObjectId': slide_id,
-                            'size': {
-                                'width': {'magnitude': 350, 'unit': 'PT'},
-                                'height': {'magnitude': 200, 'unit': 'PT'}
-                            },
-                            'transform': {
-                                'scaleX': 1,
-                                'scaleY': 1,
-                                'translateX': 50 + (i * 400),
-                                'translateY': 150,
-                                'unit': 'PT'
-                            }
-                        }
-                    }
-                })
-                
-                # Insert text into the shape
-                requests.append({
-                    'insertText': {
-                        'objectId': box_id,
-                        'text': element['text']
-                    }
-                })
-                
-                # Apply text style
-                if 'style' in element:
-                    style = element['style']
-                    requests.append({
-                        'updateTextStyle': {
-                            'objectId': box_id,
-                            'style': {
-                                'bold': True,
-                                'fontSize': {'magnitude': 14, 'unit': 'PT'},
-                                'foregroundColor': {'opaqueColor': {'themeColor': 'TEXT1'}},
-                            },
-                            'fields': 'bold,fontSize,foregroundColor'
-                        }
-                    })
+            body_text = '\n• ' + '\n• '.join(element['text'] for element in slide_content['elements'])
+            requests.append({
+                'insertText': {
+                    'objectId': f'{slide_id}_body',
+                    'text': body_text.strip()
+                }
+            })
 
         # Execute the requests
         body = {'requests': requests}
