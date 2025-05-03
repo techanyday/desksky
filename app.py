@@ -171,7 +171,11 @@ def generate_slide_content_with_gpt(topic, slide_type):
             engine="gpt-3.5-turbo-instruct",  # Use instruct model for completion
             prompt=f"""You are a professional presentation content creator.
 Create content for a {slide_type} slide about {topic}.
-Format the response as valid JSON with 'title' and 'content' keys.""",
+Return a JSON object with this exact structure:
+{{
+    "title": "Your slide title here",
+    "content": ["Point 1", "Point 2", "Point 3"]
+}}""",
             max_tokens=500,
             temperature=0.7,
             n=1
@@ -189,6 +193,50 @@ Format the response as valid JSON with 'title' and 'content' keys.""",
         logger.error(f"Full error details: {e.__class__.__name__}: {str(e)}")
         raise
 
+def transform_slide_content(raw_content):
+    """Transform the raw slide content into the expected format."""
+    if 'type' in raw_content:  # Handle outline format
+        slide_type = raw_content['type']
+        points = raw_content['main_points']
+        
+        if slide_type == 'TITLE':
+            return {
+                'layout': 'TITLE_HERO',
+                'title': points[0],
+                'subtitle': points[1] if len(points) > 1 else '',
+                'footer': 'Powered by DeckSky AI'
+            }
+        elif slide_type == 'AGENDA':
+            return {
+                'layout': 'SECTION_HEADER',
+                'title': 'Agenda',
+                'elements': [{
+                    'shape': 'ROUNDED_RECTANGLE',
+                    'text': '📋 Key Topics\n\n• ' + '\n• '.join(points),
+                    'style': {'alignment': 'START', 'accent_color': '#4285f4'}
+                }]
+            }
+        else:
+            return {
+                'layout': 'TWO_COLUMNS',
+                'title': points[0],
+                'elements': [{
+                    'shape': 'RECTANGLE',
+                    'text': '\n• '.join([''] + points[1:]),
+                    'style': {'alignment': 'START', 'accent_color': '#34a853'}
+                }]
+            }
+    else:  # Handle individual slide format
+        return {
+            'layout': 'TWO_COLUMNS',
+            'title': raw_content['title'],
+            'elements': [{
+                'shape': 'RECTANGLE',
+                'text': '\n• '.join([''] + raw_content['content']),
+                'style': {'alignment': 'START', 'accent_color': '#34a853'}
+            }]
+        }
+
 def generate_slides_content(title, topic, num_slides):
     """Generate a complete, professional slide deck with GPT-3.5 Turbo."""
     try:
@@ -197,8 +245,18 @@ def generate_slides_content(title, topic, num_slides):
             engine="gpt-3.5-turbo-instruct",  # Use instruct model for completion
             prompt=f"""You are a professional presentation content creator.
 Create an outline for a {num_slides}-slide presentation about {topic}.
-For each slide, specify the type (TITLE, AGENDA, LANDSCAPE, IMPLEMENTATION, ROI_METRICS, or CONCLUSION) and main points.
-Format the response as a valid JSON array.""",
+Return a JSON array of slide objects with this exact structure:
+[
+    {{
+        "type": "TITLE",
+        "main_points": ["Title", "Optional Subtitle"]
+    }},
+    {{
+        "type": "AGENDA",
+        "main_points": ["Point 1", "Point 2", "Point 3"]
+    }},
+    // ... more slides
+]""",
             max_tokens=1000,
             temperature=0.7,
             n=1
@@ -210,7 +268,11 @@ Format the response as a valid JSON array.""",
         content_str = response['choices'][0]['text'].strip()
         logger.info(f"Extracted content: {content_str}")
         
-        return json.loads(content_str)
+        # Parse the JSON array
+        slides_content = json.loads(content_str)
+        
+        # Transform each slide's content
+        return [transform_slide_content(slide) for slide in slides_content]
     except Exception as e:
         logger.error(f"Error generating slides content: {str(e)}")
         logger.error(f"Full error details: {e.__class__.__name__}: {str(e)}")
