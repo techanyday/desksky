@@ -102,6 +102,9 @@ class SlidesGenerator:
             ).execute()
             presentation_id = presentation['presentationId']
             
+            # Get the ID of the default first slide
+            default_slide_id = presentation.get('slides', [{}])[0].get('objectId')
+            
             # Generate content
             content = self.generate_content(title, num_slides)
             if not content:
@@ -109,6 +112,14 @@ class SlidesGenerator:
             
             # Create slides
             requests = []
+            
+            # Delete the default first slide if it exists
+            if default_slide_id:
+                requests.append({
+                    'deleteObject': {
+                        'objectId': default_slide_id
+                    }
+                })
             
             # Add each slide
             for slide in content:
