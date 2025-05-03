@@ -202,7 +202,7 @@ def generate_slides_content(title, topic, num_slides):
         - 'type': One of 'TITLE', 'AGENDA', 'BODY', 'EXAMPLES', 'CONCLUSION', 'REFERENCES'
         - 'main_points': Array of strings, first is title, rest are bullet points
         
-        Example format:
+        Example format (do not include trailing commas):
         [
             {{"type": "TITLE", "main_points": ["Main Title", "Subtitle"]}},
             {{"type": "BODY", "main_points": ["Section Title", "Point 1", "Point 2"]}}
@@ -218,15 +218,35 @@ def generate_slides_content(title, topic, num_slides):
         # Log the raw response for debugging
         logger.info(f"OpenAI raw response: {response}")
         
-        # Extract the content
+        # Extract and clean the content
         content_str = response.choices[0].text.strip()
+        # Remove any trailing commas before closing brackets
+        content_str = content_str.replace(',]', ']').replace(',\n]', '\n]')
         logger.info(f"Extracted content: {content_str}")
         
-        # Parse JSON content
-        slides_content = json.loads(content_str)
-        
-        # Transform content
-        return transform_slide_content(slides_content)
+        try:
+            # Parse JSON content
+            slides_content = json.loads(content_str)
+            
+            # Validate the structure
+            if not isinstance(slides_content, list):
+                raise ValueError("Content must be a list of slides")
+            
+            for slide in slides_content:
+                if not isinstance(slide, dict):
+                    raise ValueError("Each slide must be a dictionary")
+                if 'type' not in slide or 'main_points' not in slide:
+                    raise ValueError("Each slide must have 'type' and 'main_points'")
+                if not isinstance(slide['main_points'], list):
+                    raise ValueError("main_points must be a list")
+            
+            # Transform content
+            return transform_slide_content(slides_content)
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parsing error: {str(e)}")
+            logger.error(f"Content that failed to parse: {content_str}")
+            raise
         
     except Exception as e:
         logger.error(f"Error generating slides content: {str(e)}")
