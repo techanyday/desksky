@@ -332,7 +332,8 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
     """Generate professional slide content using GPT-3"""
     try:
         prompt = f"""Create a professional presentation about '{title}' with at least {max(8, num_slides)} slides.
-        Return a JSON object with a structured 'slides' array. Each slide must follow this exact format:
+        Return ONLY a JSON object with a structured 'slides' array. Do not include any other text before or after the JSON.
+        Each slide must follow this exact format:
 
         {{
             "slides": [
@@ -369,14 +370,15 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
         }}
 
         Requirements:
-        1. Title slide must include a compelling title and relevant subtitle
-        2. Agenda must outline 4-6 key sections
-        3. Section slides must have clear titles and 3-5 concise bullet points
-        4. Include visual guidance for charts, images, or diagrams where relevant
-        5. End with summary and closing slides
-        6. Use professional business language
-        7. Ensure logical flow between sections
-        8. Minimum 8 slides, maximum 12 slides
+        1. Return ONLY the JSON object, no other text
+        2. Title slide must include a compelling title and relevant subtitle
+        3. Agenda must outline 4-6 key sections
+        4. Section slides must have clear titles and 3-5 concise bullet points
+        5. Include visual guidance for charts, images, or diagrams where relevant
+        6. End with summary and closing slides
+        7. Use professional business language
+        8. Ensure logical flow between sections
+        9. Minimum 8 slides, maximum 12 slides
 
         Create a complete presentation about: {title}
         Topic details: {topic if topic else 'Focus on key aspects and trends'}"""
@@ -392,38 +394,44 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
             app.logger.error("Empty response from OpenAI")
             return None
             
-        # Get the content
+        # Get the content and find the JSON object
         content = response.choices[0].text.strip()
         if not content:
             app.logger.error("Empty content from GPT")
             return None
 
-        # Clean special characters
-        content = (content
-            .replace('"', '"')
-            .replace('"', '"')
-            .replace(''', "'")
-            .replace(''', "'")
-            .replace('…', '...')
-            .replace('–', '-')
-            .replace('—', '-')
-        )
-        
-        # Remove code blocks if present
-        content = re.sub(r'```json\s*|\s*```', '', content)
-        
-        # Remove any non-ASCII characters
-        content = ''.join(char for char in content if ord(char) < 128)
-        
-        # Remove log lines and clean up JSON
-        lines = []
-        for line in content.splitlines():
-            line = line.strip()
-            if line and not line.startswith('info') and not line.startswith('error'):
-                lines.append(line)
-        content = '\n'.join(lines)
-        
+        # Find the actual JSON content
         try:
+            # Try to find JSON by looking for opening brace
+            json_start = content.find('{')
+            if json_start >= 0:
+                content = content[json_start:]
+            
+            # Clean special characters
+            content = (content
+                .replace('"', '"')
+                .replace('"', '"')
+                .replace(''', "'")
+                .replace(''', "'")
+                .replace('…', '...')
+                .replace('–', '-')
+                .replace('—', '-')
+            )
+            
+            # Remove code blocks if present
+            content = re.sub(r'```json\s*|\s*```', '', content)
+            
+            # Remove any non-ASCII characters
+            content = ''.join(char for char in content if ord(char) < 128)
+            
+            # Remove log lines and clean up JSON
+            lines = []
+            for line in content.splitlines():
+                line = line.strip()
+                if line and not line.startswith('info') and not line.startswith('error'):
+                    lines.append(line)
+            content = '\n'.join(lines)
+            
             # Parse the JSON
             data = json.loads(content)
             
