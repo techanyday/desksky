@@ -22,14 +22,13 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
 
-# Initialize OpenAI client with base configuration
-client = OpenAI(
-    api_key=os.getenv('OPENAI_API_KEY'),
-    base_url="https://api.openai.com/v1",
-    timeout=60.0,
-    max_retries=2,
-    http_client=None  # Let OpenAI create a new client without proxies
-)
+# Set OpenAI configuration via environment variables
+os.environ["OPENAI_API_BASE"] = "https://api.openai.com/v1"
+os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "")
+os.environ["OPENAI_TIMEOUT_SECONDS"] = "60"
+
+# Initialize OpenAI client
+client = OpenAI()
 
 # Database configuration
 if os.environ.get('DATABASE_URL'):
