@@ -180,17 +180,33 @@ class SlidesGenerator:
             # Transform all slides to requests
             all_requests = []
             for i, slide in enumerate(slide_content):
+                # Convert old format if needed
+                if isinstance(slide, dict):
+                    if 'type' in slide and 'main_points' in slide:
+                        logger.warning(f"Converting old slide format: {slide}")
+                        # For any type, use first point as title and rest as content
+                        title = slide['main_points'][0] if slide['main_points'] else "Untitled Slide"
+                        content = slide['main_points'][1:] if len(slide['main_points']) > 1 else []
+                        slide = {
+                            'title': title,
+                            'content': content
+                        }
+
                 # Validate slide structure
                 if not isinstance(slide, dict):
                     raise ValueError(f"Invalid slide format at index {i}: {slide}")
-                if 'title' not in slide:
-                    raise ValueError(f"Missing title in slide at index {i}: {slide}")
-                if 'content' not in slide:
-                    raise ValueError(f"Missing content in slide at index {i}: {slide}")
 
                 # Add slide ID if not present
                 if 'id' not in slide:
                     slide['id'] = f'slide_{i+1}'
+
+                # Ensure title and content exist
+                if 'title' not in slide:
+                    slide['title'] = slide.get('main_points', ["Untitled Slide"])[0] if isinstance(slide.get('main_points'), list) else "Untitled Slide"
+                if 'content' not in slide and 'main_points' in slide:
+                    slide['content'] = slide['main_points'][1:] if len(slide['main_points']) > 1 else []
+                elif 'content' not in slide:
+                    slide['content'] = []
 
                 # Transform slide
                 slide_requests = self.transform_slide_to_requests(slide)
@@ -219,11 +235,11 @@ class SlidesGenerator:
             if not isinstance(slide, dict):
                 raise ValueError(f"Invalid slide format: {slide}")
             if 'id' not in slide:
-                raise ValueError(f"Missing slide ID: {slide}")
+                slide['id'] = f'slide_{hash(str(slide))}'
             if 'title' not in slide:
-                raise ValueError(f"Missing slide title: {slide}")
+                slide['title'] = "Untitled Slide"
             if 'content' not in slide:
-                raise ValueError(f"Missing slide content: {slide}")
+                slide['content'] = []
 
             requests = []
             
@@ -263,7 +279,7 @@ class SlidesGenerator:
             requests.append({
                 'insertText': {
                     'objectId': title_id,
-                    'text': slide['title']
+                    'text': str(slide['title']).strip()
                 }
             })
             
@@ -285,7 +301,7 @@ class SlidesGenerator:
 
             # Update body
             body_id = f"{slide['id']}_body"
-            bullet_points = [f"• {point}" for point in slide['content']]
+            bullet_points = [f"• {str(point).strip()}" for point in slide.get('content', [])]
             body_text = "\n".join(bullet_points)
             
             requests.append({
