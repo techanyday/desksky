@@ -135,7 +135,9 @@ class SlidesGenerator:
                     'objectId': f"{slide_id}_title",
                     'style': {
                         'foregroundColor': {
-                            'rgbColor': self.theme['rgb_colors']['title_text']
+                            'opaqueColor': {
+                                'rgbColor': self.theme['rgb_colors']['title_text']
+                            }
                         },
                         'fontSize': {
                             'magnitude': 24,
@@ -151,7 +153,9 @@ class SlidesGenerator:
                     'objectId': f"{slide_id}_body",
                     'style': {
                         'foregroundColor': {
-                            'rgbColor': self.theme['rgb_colors']['body_text']
+                            'opaqueColor': {
+                                'rgbColor': self.theme['rgb_colors']['body_text']
+                            }
                         },
                         'fontSize': {
                             'magnitude': 18,
@@ -318,7 +322,9 @@ class SlidesGenerator:
                     'objectId': title_id,
                     'style': {
                         'foregroundColor': {
-                            'rgbColor': self.theme['rgb_colors']['title_text']
+                            'opaqueColor': {
+                                'rgbColor': self.theme['rgb_colors']['title_text']
+                            }
                         },
                         'fontSize': {
                             'magnitude': 24,
@@ -348,7 +354,9 @@ class SlidesGenerator:
                     'objectId': body_id,
                     'style': {
                         'foregroundColor': {
-                            'rgbColor': self.theme['rgb_colors']['body_text']
+                            'opaqueColor': {
+                                'rgbColor': self.theme['rgb_colors']['body_text']
+                            }
                         },
                         'fontSize': {
                             'magnitude': 18,
