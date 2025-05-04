@@ -7,6 +7,7 @@ import re
 import json
 from dotenv import load_dotenv
 from themes import get_theme
+import uuid
 
 load_dotenv()
 openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -242,7 +243,7 @@ class SlidesGenerator:
                     slide['content'] = []
 
                 # Transform slide
-                slide_requests = self.transform_slide_to_requests(slide)
+                slide_requests, slide_id = self.transform_slide_to_requests(slide)
                 all_requests.extend(slide_requests)
 
             # Log requests for debugging
@@ -263,61 +264,56 @@ class SlidesGenerator:
 
     def transform_slide_to_requests(self, slide):
         """Transform a slide into Google Slides API requests."""
-        try:
-            # Validate slide data
-            if not isinstance(slide, dict):
-                raise ValueError(f"Invalid slide format: {slide}")
-            if 'id' not in slide:
-                slide['id'] = f"slide_{hash(str(slide))}"
-            if 'title' not in slide:
-                slide['title'] = "Untitled Slide"
-            if 'content' not in slide:
-                slide['content'] = []
-
-            requests = []
-            
-            # Create a new slide
-            requests.append({
-                'createSlide': {
-                    'objectId': slide['id'],
-                    'slideLayoutReference': {
-                        'predefinedLayout': 'TITLE_AND_BODY'
+        requests = []
+        slide_id = str(uuid.uuid4())
+        
+        # Create the slide first
+        requests.append({
+            'createSlide': {
+                'objectId': slide_id,
+                'slideLayoutReference': {
+                    'predefinedLayout': 'TITLE_AND_BODY'
+                },
+                'placeholderIdMappings': [
+                    {
+                        'layoutPlaceholder': {'type': 'TITLE'},
+                        'objectId': f"{slide_id}_title"
                     },
-                    'placeholderIdMappings': [
-                        {
-                            'layoutPlaceholder': {'type': 'TITLE'},
-                            'objectId': f"{slide['id']}_title"
-                        },
-                        {
-                            'layoutPlaceholder': {'type': 'BODY'},
-                            'objectId': f"{slide['id']}_body"
-                        }
-                    ]
-                }
-            })
-            
-            # Update slide background
-            requests.append({
-                'updatePageProperties': {
-                    'objectId': slide['id'],
-                    'pageProperties': {
-                        'pageBackgroundFill': self._create_color_style(self.theme['rgb_colors']['background'])
-                    },
-                    'fields': 'pageBackgroundFill'
-                }
-            })
-
-            # Update title
-            title_id = f"{slide['id']}_title"
-            requests.append({
-                'insertText': {
-                    'objectId': title_id,
-                    'text': str(slide['title']).strip()
-                }
-            })
-            
-            # Update title style
-            requests.append({
+                    {
+                        'layoutPlaceholder': {'type': 'BODY'},
+                        'objectId': f"{slide_id}_body"
+                    }
+                ]
+            }
+        })
+        
+        # Apply theme colors
+        requests.extend(self._apply_theme_to_slide(slide_id))
+        
+        # Create title text box
+        title_id = f"{slide_id}_title"
+        requests.append({
+            'insertText': {
+                'objectId': title_id,
+                'text': slide['title']
+            }
+        })
+        
+        # Create body text box
+        body_id = f"{slide_id}_body"
+        bullet_points = [f"• {str(point).strip()}" for point in slide.get('content', [])]
+        body_text = "\n".join(bullet_points)
+        
+        requests.append({
+            'insertText': {
+                'objectId': body_id,
+                'text': body_text
+            }
+        })
+        
+        # Apply text styles after inserting text
+        requests.extend([
+            {
                 'updateTextStyle': {
                     'objectId': title_id,
                     'style': {
@@ -334,22 +330,8 @@ class SlidesGenerator:
                     },
                     'fields': 'foregroundColor,fontSize,bold'
                 }
-            })
-
-            # Update body
-            body_id = f"{slide['id']}_body"
-            bullet_points = [f"• {str(point).strip()}" for point in slide.get('content', [])]
-            body_text = "\n".join(bullet_points)
-            
-            requests.append({
-                'insertText': {
-                    'objectId': body_id,
-                    'text': body_text
-                }
-            })
-            
-            # Update body text style
-            requests.append({
+            },
+            {
                 'updateTextStyle': {
                     'objectId': body_id,
                     'style': {
@@ -365,13 +347,10 @@ class SlidesGenerator:
                     },
                     'fields': 'foregroundColor,fontSize'
                 }
-            })
-
-            return requests
-        except Exception as e:
-            logger.error(f"Error transforming slide: {str(e)}")
-            logger.error(f"Problematic slide data: {json.dumps(slide, indent=2)}")
-            raise ValueError(f"Failed to transform slide: {str(e)}") from e
+            }
+        ])
+        
+        return requests, slide_id
 
     def _create_title_slide(self, title, subtitle=None, slide_id=None):
         """Create a title slide"""
