@@ -153,7 +153,13 @@ class SlidesGenerator:
         """Create a color style for Google Slides API."""
         return {
             'solidFill': {
-                'color': rgb_color
+                'color': {
+                    'rgbColor': {
+                        'red': rgb_color['red'],
+                        'green': rgb_color['green'],
+                        'blue': rgb_color['blue']
+                    }
+                }
             }
         }
 
@@ -235,7 +241,7 @@ class SlidesGenerator:
             if not isinstance(slide, dict):
                 raise ValueError(f"Invalid slide format: {slide}")
             if 'id' not in slide:
-                slide['id'] = f'slide_{hash(str(slide))}'
+                slide['id'] = f"slide_{hash(str(slide))}"
             if 'title' not in slide:
                 slide['title'] = "Untitled Slide"
             if 'content' not in slide:
