@@ -334,35 +334,41 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
     """Generate slide content using GPT-3.5."""
     try:
         # Create system prompt
-        system_prompt = """You are a presentation content generator. Create professional presentation content based on the given title and topic.
-        Return ONLY a JSON array of slides. Each slide MUST have exactly these fields:
-        - "title": A clear, concise title for the slide
-        - "content": A list of bullet points (3-5 points per slide)
-        
-        DO NOT include any other fields like 'type', 'main_points', etc.
-        
-        Example format:
-        [
-            {
-                "title": "Introduction to AI",
-                "content": [
-                    "Overview of artificial intelligence",
-                    "Key concepts and terminology",
-                    "Historical development"
-                ]
-            }
+        system_prompt = """You are a presentation content generator. Create a JSON array of slides.
+
+REQUIRED FORMAT:
+[
+    {
+        "title": "Title of the slide",
+        "content": ["Point 1", "Point 2", "Point 3"]
+    }
+]
+
+STRICT REQUIREMENTS:
+1. Each slide object MUST have EXACTLY these two fields:
+   - "title": string
+   - "content": array of strings
+2. NO OTHER FIELDS are allowed (no 'type', 'main_points', etc.)
+3. First slide title should be the presentation title
+4. Last slide should be a conclusion
+5. Keep text simple - no special characters
+6. Return ONLY the JSON array with no other text
+
+Example of valid response:
+[
+    {
+        "title": "Introduction to AI",
+        "content": [
+            "Overview of artificial intelligence",
+            "Key concepts and terminology",
+            "Historical development"
         ]
-        
-        Requirements:
-        1. First slide title should be the presentation title
-        2. Last slide should be a conclusion/summary
-        3. Each bullet point should be a complete, meaningful statement
-        4. Keep text simple - no special characters or formatting
-        5. Use only regular quotes (") and apostrophes (')
-        6. Return ONLY the JSON array - no other text, no markdown"""
+    }
+]"""
 
         # Create user prompt
-        user_prompt = f"Create a {num_slides}-slide presentation about '{title}'. Focus: {topic}"
+        user_prompt = f"""Create a {num_slides}-slide presentation about '{title}'. Focus: {topic}.
+Remember: Each slide must have ONLY 'title' and 'content' fields."""
 
         # Get completion from OpenAI
         completion = openai.ChatCompletion.create(
@@ -371,7 +377,8 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.7
+            temperature=0.7,
+            max_tokens=2000
         )
 
         # Parse and validate the response
@@ -410,33 +417,31 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
         processed_slides = []
         for i, slide in enumerate(slides):
             # Convert old format if needed
-            if isinstance(slide, dict) and 'type' in slide and 'main_points' in slide:
-                app.logger.warning(f"Converting old slide format: {slide}")
-                if slide['type'] == 'TITLE':
+            if isinstance(slide, dict):
+                if 'type' in slide and 'main_points' in slide:
+                    app.logger.warning(f"Converting old slide format: {slide}")
+                    # For any type, use first point as title and rest as content
+                    title = slide['main_points'][0] if slide['main_points'] else "Untitled Slide"
+                    content = slide['main_points'][1:] if len(slide['main_points']) > 1 else []
                     slide = {
-                        'title': slide['main_points'][0],
-                        'content': slide['main_points'][1:] if len(slide['main_points']) > 1 else []
+                        'title': title,
+                        'content': content
                     }
-                else:
-                    slide = {
-                        'title': slide['main_points'][0],
-                        'content': slide['main_points'][1:]
-                    }
+                elif 'title' not in slide or 'content' not in slide:
+                    app.logger.error(f"Invalid slide format at index {i}: {slide}")
+                    raise ValueError(f"Slide {i} missing required fields")
 
             # Validate slide structure
             if not isinstance(slide, dict):
                 raise ValueError(f"Slide {i} is not a dictionary: {slide}")
-            if 'title' not in slide:
-                raise ValueError(f"Slide {i} missing title field: {slide}")
-            if 'content' not in slide:
-                raise ValueError(f"Slide {i} missing content field: {slide}")
-            if not isinstance(slide['content'], list):
+            if not isinstance(slide.get('content', []), list):
                 raise ValueError(f"Slide {i} content is not a list: {slide}")
                 
+            # Create processed slide with only required fields
             processed_slide = {
                 'id': f'slide_{i+1}',
-                'title': slide['title'].strip(),
-                'content': [point.strip() for point in slide['content']]
+                'title': str(slide.get('title', '')).strip() or f"Slide {i+1}",
+                'content': [str(point).strip() for point in slide.get('content', [])]
             }
             processed_slides.append(processed_slide)
             
