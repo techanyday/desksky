@@ -123,7 +123,13 @@ class SlidesGenerator:
             'updatePageProperties': {
                 'objectId': slide_id,
                 'pageProperties': {
-                    'pageBackgroundFill': self._create_color_style(self.theme['rgb_colors']['background'])
+                    'pageBackgroundFill': {
+                        'solidFill': {
+                            'color': {
+                                'rgbColor': self.theme['rgb_colors']['background']
+                            }
+                        }
+                    }
                 },
                 'fields': 'pageBackgroundFill'
             }
@@ -136,8 +142,10 @@ class SlidesGenerator:
                     'objectId': f"{slide_id}_title",
                     'style': {
                         'foregroundColor': {
-                            'opaqueColor': {
-                                'rgbColor': self.theme['rgb_colors']['title_text']
+                            'solidFill': {
+                                'color': {
+                                    'rgbColor': self.theme['rgb_colors']['title_text']
+                                }
                             }
                         },
                         'fontSize': {
@@ -154,8 +162,10 @@ class SlidesGenerator:
                     'objectId': f"{slide_id}_body",
                     'style': {
                         'foregroundColor': {
-                            'opaqueColor': {
-                                'rgbColor': self.theme['rgb_colors']['body_text']
+                            'solidFill': {
+                                'color': {
+                                    'rgbColor': self.theme['rgb_colors']['body_text']
+                                }
                             }
                         },
                         'fontSize': {
@@ -173,7 +183,13 @@ class SlidesGenerator:
             'updateShapeProperties': {
                 'objectId': slide_id,
                 'shapeProperties': {
-                    'shapeBackgroundFill': self._create_color_style(self.theme['rgb_colors']['shape_fill'])
+                    'shapeBackgroundFill': {
+                        'solidFill': {
+                            'color': {
+                                'rgbColor': self.theme['rgb_colors']['shape_fill']
+                            }
+                        }
+                    }
                 },
                 'fields': 'shapeBackgroundFill'
             }
@@ -186,7 +202,7 @@ class SlidesGenerator:
         return {
             'solidFill': {
                 'color': {
-                    'rgbColor': rgb_color  # rgb_color is already in correct format
+                    'rgbColor': rgb_color
                 }
             }
         }
@@ -318,8 +334,10 @@ class SlidesGenerator:
                     'objectId': title_id,
                     'style': {
                         'foregroundColor': {
-                            'opaqueColor': {
-                                'rgbColor': self.theme['rgb_colors']['title_text']
+                            'solidFill': {
+                                'color': {
+                                    'rgbColor': self.theme['rgb_colors']['title_text']
+                                }
                             }
                         },
                         'fontSize': {
@@ -336,8 +354,10 @@ class SlidesGenerator:
                     'objectId': body_id,
                     'style': {
                         'foregroundColor': {
-                            'opaqueColor': {
-                                'rgbColor': self.theme['rgb_colors']['body_text']
+                            'solidFill': {
+                                'color': {
+                                    'rgbColor': self.theme['rgb_colors']['body_text']
+                                }
                             }
                         },
                         'fontSize': {
