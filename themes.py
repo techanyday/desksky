@@ -7,8 +7,7 @@ def hex_to_rgb_float(hex_color):
     return {
         'red': rgb[0],
         'green': rgb[1],
-        'blue': rgb[2],
-        'alpha': 1.0
+        'blue': rgb[2]
     }
 
 PRESENTATION_THEMES = {

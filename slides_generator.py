@@ -16,7 +16,30 @@ class SlidesGenerator:
     def __init__(self, credentials, theme_id='corporate'):
         self.service = build('slides', 'v1', credentials=credentials)
         self.drive_service = build('drive', 'v3', credentials=credentials)
-        self.theme = get_theme(theme_id)
+        try:
+            self.theme = get_theme(theme_id)
+            if not self.theme or 'rgb_colors' not in self.theme:
+                logger.error(f"Invalid theme or missing rgb_colors: {theme_id}")
+                # Fall back to default colors if theme loading fails
+                self.theme = {
+                    'rgb_colors': {
+                        'background': {'red': 1.0, 'green': 1.0, 'blue': 1.0},
+                        'title_text': {'red': 0.0, 'green': 0.0, 'blue': 0.0},
+                        'body_text': {'red': 0.2, 'green': 0.2, 'blue': 0.2},
+                        'shape_fill': {'red': 0.9, 'green': 0.9, 'blue': 0.9}
+                    }
+                }
+        except Exception as e:
+            logger.error(f"Error loading theme: {str(e)}")
+            # Use default theme colors
+            self.theme = {
+                'rgb_colors': {
+                    'background': {'red': 1.0, 'green': 1.0, 'blue': 1.0},
+                    'title_text': {'red': 0.0, 'green': 0.0, 'blue': 0.0},
+                    'body_text': {'red': 0.2, 'green': 0.2, 'blue': 0.2},
+                    'shape_fill': {'red': 0.9, 'green': 0.9, 'blue': 0.9}
+                }
+            }
 
     def generate_content(self, title, num_slides):
         """Generate presentation content using GPT-3.5-turbo"""
@@ -154,11 +177,7 @@ class SlidesGenerator:
         return {
             'solidFill': {
                 'color': {
-                    'rgbColor': {
-                        'red': rgb_color['red'],
-                        'green': rgb_color['green'],
-                        'blue': rgb_color['blue']
-                    }
+                    'rgbColor': rgb_color  # rgb_color is already in correct format
                 }
             }
         }
