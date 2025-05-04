@@ -134,7 +134,9 @@ class SlidesGenerator:
                 'updateTextStyle': {
                     'objectId': f"{slide_id}_title",
                     'style': {
-                        'foregroundColor': self.theme['rgb_colors']['title_text'],
+                        'foregroundColor': {
+                            'rgbColor': self.theme['rgb_colors']['title_text']
+                        },
                         'fontSize': {
                             'magnitude': 24,
                             'unit': 'PT'
@@ -148,7 +150,9 @@ class SlidesGenerator:
                 'updateTextStyle': {
                     'objectId': f"{slide_id}_body",
                     'style': {
-                        'foregroundColor': self.theme['rgb_colors']['body_text'],
+                        'foregroundColor': {
+                            'rgbColor': self.theme['rgb_colors']['body_text']
+                        },
                         'fontSize': {
                             'magnitude': 18,
                             'unit': 'PT'
@@ -164,7 +168,7 @@ class SlidesGenerator:
             'updateShapeProperties': {
                 'objectId': slide_id,
                 'shapeProperties': {
-                    'shapeBackgroundFill': self._create_color_style(self.theme['rgb_colors']['background'])
+                    'shapeBackgroundFill': self._create_color_style(self.theme['rgb_colors']['shape_fill'])
                 },
                 'fields': 'shapeBackgroundFill'
             }
@@ -313,7 +317,9 @@ class SlidesGenerator:
                 'updateTextStyle': {
                     'objectId': title_id,
                     'style': {
-                        'foregroundColor': self.theme['rgb_colors']['title_text'],
+                        'foregroundColor': {
+                            'rgbColor': self.theme['rgb_colors']['title_text']
+                        },
                         'fontSize': {
                             'magnitude': 24,
                             'unit': 'PT'
@@ -341,7 +347,9 @@ class SlidesGenerator:
                 'updateTextStyle': {
                     'objectId': body_id,
                     'style': {
-                        'foregroundColor': self.theme['rgb_colors']['body_text'],
+                        'foregroundColor': {
+                            'rgbColor': self.theme['rgb_colors']['body_text']
+                        },
                         'fontSize': {
                             'magnitude': 18,
                             'unit': 'PT'
