@@ -336,39 +336,50 @@ def generate_slide_content_with_gpt(title, topic, num_slides):
         # Create system prompt
         system_prompt = """You are a presentation content generator. Create a JSON array of slides.
 
-REQUIRED FORMAT:
+REQUIRED FORMAT - EVERY slide MUST follow this EXACT format:
+{
+    "title": "Title text here",  # Required string
+    "content": ["Point 1", "Point 2", "Point 3"]  # Required array of strings
+}
+
+For the FIRST slide:
+{
+    "title": "Main presentation title",  # Use the presentation title here
+    "content": ["Subtitle or introduction point"]  # Brief introduction
+}
+
+Example of a complete response:
 [
     {
-        "title": "Title of the slide",
-        "content": ["Point 1", "Point 2", "Point 3"]
+        "title": "Introduction to AI",  # First slide uses main title
+        "content": ["Understanding the future of technology"]
+    },
+    {
+        "title": "What is Artificial Intelligence?",  # Subsequent slides use section titles
+        "content": [
+            "Definition and core concepts",
+            "Types of AI systems",
+            "Key applications"
+        ]
     }
 ]
 
 STRICT REQUIREMENTS:
-1. Each slide object MUST have EXACTLY these two fields:
-   - "title": string
-   - "content": array of strings
+1. EVERY slide object MUST have EXACTLY these two fields:
+   - "title": string  (REQUIRED)
+   - "content": array of strings  (REQUIRED)
 2. NO OTHER FIELDS are allowed (no 'type', 'main_points', etc.)
-3. First slide title should be the presentation title
+3. First slide MUST use the presentation title
 4. Last slide should be a conclusion
 5. Keep text simple - no special characters
-6. Return ONLY the JSON array with no other text
-
-Example of valid response:
-[
-    {
-        "title": "Introduction to AI",
-        "content": [
-            "Overview of artificial intelligence",
-            "Key concepts and terminology",
-            "Historical development"
-        ]
-    }
-]"""
+6. Return ONLY the JSON array with no other text"""
 
         # Create user prompt
         user_prompt = f"""Create a {num_slides}-slide presentation about '{title}'. Focus: {topic}.
-Remember: Each slide must have ONLY 'title' and 'content' fields."""
+Remember: 
+1. First slide MUST use title: "{title}"
+2. Each slide must have ONLY 'title' and 'content' fields
+3. NO 'type' or 'main_points' fields allowed"""
 
         # Get completion from OpenAI
         completion = openai.ChatCompletion.create(
@@ -421,10 +432,10 @@ Remember: Each slide must have ONLY 'title' and 'content' fields."""
                 if 'type' in slide and 'main_points' in slide:
                     app.logger.warning(f"Converting old slide format: {slide}")
                     # For any type, use first point as title and rest as content
-                    title = slide['main_points'][0] if slide['main_points'] else "Untitled Slide"
+                    title = slide['main_points'][0] if slide['main_points'] else title  # Use presentation title for first slide
                     content = slide['main_points'][1:] if len(slide['main_points']) > 1 else []
                     slide = {
-                        'title': title,
+                        'title': title if i > 0 else title,  # Force first slide to use presentation title
                         'content': content
                     }
                 elif 'title' not in slide or 'content' not in slide:
@@ -440,7 +451,7 @@ Remember: Each slide must have ONLY 'title' and 'content' fields."""
             # Create processed slide with only required fields
             processed_slide = {
                 'id': f'slide_{i+1}',
-                'title': str(slide.get('title', '')).strip() or f"Slide {i+1}",
+                'title': title if i == 0 else str(slide.get('title', '')).strip() or f"Slide {i+1}",  # Force first slide title
                 'content': [str(point).strip() for point in slide.get('content', [])]
             }
             processed_slides.append(processed_slide)
